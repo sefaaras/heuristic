@@ -137,11 +137,19 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             norm_qual = qual ./ sum(qual);
             norm_qual = 1 - norm_qual;
             
-            D(1) = mean(pdist2(EA_1(2:PS1,:), EA_1(1,:)));
-            if isnan(EA_2)
-                [mSet, nSet] = size(EA_2);
-                EA_2 = ones(mSet, nSet) * -10;
+            if ~isreal(EA_1)
+                EA_1 = real(EA_1);
             end
+            if ~isreal(EA_2)
+                EA_2 = real(EA_2);
+            end
+            if any(~isfinite(EA_1(:)))
+                EA_1(~isfinite(EA_1)) = 0;
+            end
+            if any(~isfinite(EA_2(:)))
+                EA_2(~isfinite(EA_2)) = 0;
+            end
+            D(1) = mean(pdist2(EA_1(2:PS1,:), EA_1(1,:)));
             D(2) = mean(pdist2(EA_2(2:PS2,:), EA_2(1,:)));
             norm_div = D ./ sum(D);
             
@@ -498,6 +506,7 @@ function [x, fitx, setting, bestold, bestx, bnd, fitness, FE, curve, ...
     
     % Evaluate
     [fitness.raw, FE] = calculate_fitness(arxvalid, problem, FE);
+    fitness.raw = fitness.raw(:)';  % Keep Scout fitness values in the row-vector convention used by EBO.
     
     % Record curve with top individuals from EA_1 for history
     for eval_idx = 1:PopSize
@@ -541,12 +550,9 @@ function [x, fitx, setting, bestold, bestx, bnd, fitness, FE, curve, ...
     end
     
     % Update CMA-ES parameters
-    setting.weights = fitness.raw(1:setting.mu)';
-    if sum(setting.weights) > 1e25
-        setting.weights = 1/setting.mu*ones(setting.mu,1);
-    end
-    setting.weights = setting.weights/sum(setting.weights);
-    setting.weights = fliplr(setting.weights);
+    setting.weights = log(max(setting.mu, n/2) + 1/2) - log((1:setting.mu)');
+    setting.weights = setting.weights / sum(setting.weights);
+    setting.mueff = sum(setting.weights)^2 / sum(setting.weights.^2);
     
     setting.xold = setting.xmean;
     cmean = 1;
@@ -577,19 +583,25 @@ function [x, fitx, setting, bestold, bestx, bnd, fitness, FE, curve, ...
     
     if (setting.ccov1+setting.ccovmu+neg.ccov) > 0 && mod(iter, 1/(setting.ccov1+setting.ccovmu+neg.ccov)/n/10) < 1
         setting.C = triu(setting.C)+triu(setting.C,1)';
-        if isnan(setting.C)
-            [mSet, nSet] = size(setting.C);
-            setting.C = rand(mSet, nSet);
+        setting.C = real((setting.C + setting.C') / 2);
+        if any(~isfinite(setting.C(:)))
+            setting.C = eye(n, n);
         end
         
         [setting.B, tmp] = eig(setting.C);
-        setting.diagD = diag(tmp);
+        setting.diagD = real(diag(tmp));
         
         if min(setting.diagD) <= 0
             setting.diagD(setting.diagD<0) = 0;
-            tmp = max(setting.diagD)/1e14;
-            setting.C = setting.C + tmp*eye(n,n); 
-            setting.diagD = setting.diagD + tmp*ones(n,1);
+            if max(setting.diagD) <= 0
+                setting.C = eye(n, n);
+                setting.B = eye(n, n);
+                setting.diagD = ones(n, 1);
+            else
+                tmp = max(setting.diagD)/1e14;
+                setting.C = setting.C + tmp*eye(n,n); 
+                setting.diagD = setting.diagD + tmp*ones(n,1);
+            end
         end
         if max(setting.diagD) > 1e14*min(setting.diagD)
             tmp = max(setting.diagD)/1e14 - min(setting.diagD);
@@ -784,7 +796,7 @@ function [x, f, FE, succ] = LS2(bestx, f, Par, FE, problem, Max_FES, xmin, xmax)
     if (f - FUN) > 0
         succ = 1;
         f = FUN;
-        x(1,:) = Xsqp;
+        x(1,:) = Xsqp(:)';
     else
         succ = 0;
         x = bestx;
@@ -795,5 +807,6 @@ end
 
 function f = evaluate_for_ls(x, problem)
     % Wrapper function for local search
-    f = feval(problem.fhd, x, problem.number);
+    f = calculate_fitness(x(:), problem, 0);
+    f = f(1);
 end
