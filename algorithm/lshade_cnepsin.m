@@ -234,6 +234,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             ui(J) = vi(J);
             ui(crs) = vi(crs);
         end
+        ui = boundConstraint(ui, pop, lu);
 
         % Evaluate offspring
         [children_fitness, FE] = calculate_fitness(ui', problem, FE);

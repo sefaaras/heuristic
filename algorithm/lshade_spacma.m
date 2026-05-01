@@ -71,7 +71,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     bsf_solution = zeros(1, dim);
 
     for i = 1:pop_size
-        if fitness(i) < bsf_fit_var && isreal(pop(i, :)) && sum(isnan(pop(i, :))) == 0 && min(pop(i, :)) >= -100 && max(pop(i, :)) <= 100
+        if fitness(i) < bsf_fit_var && is_valid_solution(pop(i, :), lu)
             bsf_fit_var = fitness(i);
             bsf_solution = pop(i, :);
         end
@@ -204,7 +204,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
         % Update best
         for i = 1:pop_size
-            if children_fitness(i) < bsf_fit_var && isreal(ui(i, :)) && sum(isnan(ui(i, :))) == 0 && min(ui(i, :)) >= -100 && max(ui(i, :)) <= 100
+            if children_fitness(i) < bsf_fit_var && is_valid_solution(ui(i, :), lu)
                 bsf_fit_var = children_fitness(i);
                 bsf_solution = ui(i, :);
             end
@@ -411,4 +411,8 @@ function vi = boundConstraint(vi, pop, lu)
     xu = repmat(lu(2, :), NP, 1);
     pos = vi > xu;
     vi(pos) = (pop(pos) + xu(pos)) / 2;
+end
+
+function ok = is_valid_solution(x, lu)
+    ok = isreal(x) && all(isfinite(x)) && all(x >= lu(1, :)) && all(x <= lu(2, :));
 end

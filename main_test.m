@@ -10,11 +10,11 @@ addpath('problem/CEC2022');
 fprintf('=== Quick Algorithm Integration Test ===\n\n');
 
 % Test configuration - minimal settings for quick validation
-algorithms = {'ebocmar'};  % Test Weighted Differential Evolution algorithm
+algorithms = {'lshade_spacma'};  % Test Weighted Differential Evolution algorithm
 % Her CEC benchmark'ından 3 problem: CEC2014, CEC2017, CEC2020, CEC2020RW, CEC2021, CEC2022
 % test_experiments = {'cec2014_10', 'cec2017_10', 'cec2020_10', 'cec2020rw', 'cec2021_10', 'cec2022_10'};
 test_experiments = {'cec2020rw'};
-test_functions = [1, 2, 3];      % Her benchmark'tan F1, F2, F3
+test_functions = [1, 2, 3, 26];      % Her benchmark'tan F1, F2, F3
 test_runs = 3;                   % 3 runs for validation
 
 fprintf('Test Configuration:\n');
