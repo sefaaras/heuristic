@@ -15,7 +15,7 @@
 clear; clc;
 
 % ------------------------- Configuration -------------------------
-algorithms   = {'sfs', 'fdb_sfs'}; % {A, B}: comparison direction is A vs B
+algorithms   = {'fdb_sfs', 'sfs'}; % {A, B}: comparison direction is proposed vs baseline
 base_dir     = 'results';          % root folder of saved runs
 alpha        = 0.05;               % significance level
 score_plus   = 5;                  % project score weight for '+' wins
