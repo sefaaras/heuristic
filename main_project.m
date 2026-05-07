@@ -5,7 +5,7 @@ addpath('problem/CEC2021');
 addpath('problem/CEC2022');
 
 % Algorithm configuration
-algorithms = {'sfs', 'fdb_sfs'};
+algorithms = {'ea4eig', 'fdb_ea4eig'};
 
 % CPU çekirdek sayısını tespit et
 num_cores = feature('numcores');
@@ -32,7 +32,7 @@ end
 
 % List of all available experiments
 all_experiments = {
-    'cec2021_10', 'cec2021_20', 'cec2022_10', 'cec2022_20'
+   'cec2022_10', 'cec2022_20'
 };
 
 % Calculate total number of jobs for preallocation
@@ -42,7 +42,7 @@ for exp_idx = 1:length(all_experiments)
     experiment_name = all_experiments{exp_idx};
     config = experiment_factory(experiment_name);
     config.runs_per_experiment = 21;
-    config.maxFE = 1;
+    config.maxFE = 1000;
     
     jobs_for_this_exp = length(algorithms) * length(config.function_numbers) * config.runs_per_experiment;
     fprintf('  %s: %d algorithms x %d functions x %d runs = %d jobs\n', ...
@@ -61,7 +61,7 @@ for exp_idx = 1:length(all_experiments)
     experiment_name = all_experiments{exp_idx};
     config = experiment_factory(experiment_name);
     config.runs_per_experiment = 21;
-    config.maxFE = 1;
+    config.maxFE = 1000;
     
     for alg_idx = 1:length(algorithms)
         alg_name = algorithms{alg_idx};
