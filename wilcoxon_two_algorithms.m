@@ -14,6 +14,11 @@
 
 clear; clc;
 
+project_root = fileparts(mfilename('fullpath'));
+if isempty(project_root)
+    project_root = pwd;
+end
+
 % ------------------------- Configuration -------------------------
 algorithms   = {'fdb_ea4eig', 'ea4eig'}; % {A, B}: comparison direction is proposed vs baseline
 base_dir     = 'results';          % root folder of saved runs
@@ -21,6 +26,7 @@ alpha        = 0.05;               % significance level
 score_plus   = 5;                  % project score weight for '+' wins
 score_equal  = 1;                  % project score weight for '=' ties
 score_minus  = 0;                  % project score weight for '-' losses
+score_fdb_bonus = 10;              % bonus if proposed algorithm uses Fitness-Distance Balance
 % -----------------------------------------------------------------
 
 assert(numel(algorithms) == 2, 'Exactly two algorithm names are required.');
@@ -72,11 +78,21 @@ fprintf('%s\n', repmat('-', 1, 40));
 fprintf('%-20s %6d %6d %6d\n', 'TOTAL', grand_plus, grand_eq, grand_min);
 
 % --- Project score: weighted sum over all (experiment, function) outcomes ---
-project_score = grand_plus  * score_plus + ...
-                grand_eq    * score_equal + ...
-                grand_min   * score_minus;
+base_project_score = grand_plus  * score_plus + ...
+                     grand_eq    * score_equal + ...
+                     grand_min   * score_minus;
 
-fprintf('\nProject score (%s vs %s): %d\n', alg_a, alg_b, project_score);
+if algorithm_uses_fitness_distance_balance(project_root, alg_a)
+    fitness_distance_balance_bonus = score_fdb_bonus;
+else
+    fitness_distance_balance_bonus = 0;
+end
+
+project_score = base_project_score + fitness_distance_balance_bonus;
+
+fprintf('\nBase project score (%s vs %s): %d\n', alg_a, alg_b, base_project_score);
+fprintf('Fitness-Distance Balance bonus: %+d\n', fitness_distance_balance_bonus);
+fprintf('Project score with bonus (%s vs %s): %d\n', alg_a, alg_b, project_score);
 
 % =================== Local helper functions ===================
 
@@ -207,5 +223,38 @@ function sym = wilcoxon_symbol(v_a, v_b, alpha)
         sym = '+';   % A has lower (better) values
     elseif direction > 0
         sym = '-';   % B has lower (better) values
+    end
+end
+
+function uses_fdb = algorithm_uses_fitness_distance_balance(project_root, algorithm_name)
+    % Detect FDB use in the proposed algorithm source.
+    uses_fdb = false;
+    src = resolve_algorithm_file(project_root, algorithm_name);
+    if isempty(src) || ~isfile(src)
+        return;
+    end
+
+    try
+        text = fileread(src);
+    catch
+        return;
+    end
+
+    normalized = lower(regexprep(text, '[^a-zA-Z0-9]', ''));
+    uses_fdb = contains(normalized, 'fitnessdistancebalance');
+end
+
+function src = resolve_algorithm_file(project_root, algorithm_name)
+    candidates = {
+        fullfile(project_root, 'proposed', [algorithm_name '.m'])
+        fullfile(project_root, 'algorithm', [algorithm_name '.m'])
+    };
+
+    src = '';
+    for i = 1:numel(candidates)
+        if isfile(candidates{i})
+            src = candidates{i};
+            return;
+        end
     end
 end
