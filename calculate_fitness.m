@@ -36,6 +36,12 @@ function [fitness, FE, is_feasible] = calculate_fitness(solutions, problem, FE)
         if contains(func2str(problem.fhd), 'cec20rw')
             % CEC2020RW returns [f, g, h] where g<=0 and h=0 for feasibility
             % CEC2020RW expects solutions as row vectors (each row is a solution)
+            if isfield(problem, 'lb') && isfield(problem, 'ub') ...
+                    && ~isempty(problem.lb) && ~isempty(problem.ub)
+                lb = problem.lb(:);   % D x 1
+                ub = problem.ub(:);   % D x 1
+                solutions = min(max(solutions, lb), ub);  % D x ps (implicit expansion)
+            end
             [fitness, g, h] = feval(problem.fhd, solutions', problem.number);
             
             % Check feasibility for CEC2020RW problems
