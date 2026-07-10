@@ -16,8 +16,8 @@
 % Reference:
 % Ryoji Tanabe, Alex S. Fukunaga,
 % Improving the Search Performance of SHADE Using Linear Population
-% Size Reduction, IEEE Congress on Evolutionary Computation (CEC), 2014
-% DOI: https://doi.org/10.1109/CEC.2014.6900380
+% Size Reduction, IEEE Congress on Evolutionary Computation (CEC), 2014, pp. 1658-1665
+% https://doi.org/10.1109/CEC.2014.6900380
 % ----------------------------------------------------------------------- %
 % Input: problem structure with fields:
 %   - dimension: problem dimension

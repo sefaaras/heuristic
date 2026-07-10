@@ -14,7 +14,7 @@
 %   - Pack exchange: Coyotes can leave and join other packs
 %
 % Reference:
-% Julio César Pierezan, Leandro dos Santos Coelho,
+% Juliano Pierezan, Leandro dos Santos Coelho,
 % Coyote Optimization Algorithm: A New Metaheuristic for Global Optimization Problems,
 % 2018 IEEE Congress on Evolutionary Computation (CEC), 2018, pp. 1-8
 % https://doi.org/10.1109/CEC.2018.8477769

@@ -17,9 +17,11 @@
 %   - Linear population size reduction
 %
 % Reference:
-% Noor Awad, Mostafa Ali, Ponnuthurai Suganthan,
-% Semi-parameter adaptation for differential evolution,
-% ACM Genetic and Evolutionary Computation Conference (GECCO), 2017
+% Ali W. Mohamed, Anas A. Hadi, Anas M. Fattouh, Kamal M. Jambi,
+% LSHADE with semi-parameter adaptation hybrid with CMA-ES for solving
+% CEC 2017 benchmark problems,
+% 2017 IEEE Congress on Evolutionary Computation (CEC), 2017, pp. 145-152
+% https://doi.org/10.1109/CEC.2017.7969307
 % ----------------------------------------------------------------------- %
 % Input: problem structure with fields:
 %   - dimension: problem dimension

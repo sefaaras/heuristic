@@ -12,10 +12,10 @@
 %   - Multiple mutation strategies analogous to DE variants
 %
 % Reference:
-% Rahul Kumar Patel, Licheng Jiao, Fang Liu,
-% Spherical evolution for solving multimodal and composition optimization problems,
-% Knowledge-Based Systems 277 (2023) 110837
-% https://doi.org/10.1016/j.knosys.2023.110837
+% Deyu Tang,
+% Spherical evolution for solving continuous optimization problems,
+% Applied Soft Computing 81 (2019) 105499
+% https://doi.org/10.1016/j.asoc.2019.105499
 % ----------------------------------------------------------------------- %
 % Input: problem structure with fields:
 %   - dimension: problem dimension

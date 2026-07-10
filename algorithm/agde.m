@@ -18,6 +18,7 @@
 % Novel mutation strategy for enhancing SHADE and LSHADE algorithms 
 % for global numerical optimization,
 % Swarm and Evolutionary Computation, 50, 100455.
+% https://doi.org/10.1016/j.swevo.2018.10.006
 % ----------------------------------------------------------------------- %
 % Input: problem structure with fields:
 %   - dimension: problem dimension

@@ -19,7 +19,8 @@
 % Kumar, A., Misra, R. K., & Singh, D. (2017).
 % Improving the local search capability of effective butterfly optimizer 
 % using covariance matrix adapted retreat phase.
-% IEEE Congress on Evolutionary Computation (CEC), 1622-1629.
+% IEEE Congress on Evolutionary Computation (CEC), 2017, pp. 1835-1842
+% https://doi.org/10.1109/CEC.2017.7969524
 % ----------------------------------------------------------------------- %
 % Input: problem structure with fields:
 %   - dimension: problem dimension

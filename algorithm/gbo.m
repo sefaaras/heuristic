@@ -15,8 +15,8 @@
 % Reference:
 % Iman Ahmadianfar, Omid Bozorg-Haddad, Xuefeng Chu,
 % Gradient-Based Optimizer: A New Metaheuristic Optimization Algorithm,
-% Information Sciences, 2020
-% DOI: https://doi.org/10.1016/j.ins.2020.06.037
+% Information Sciences 540 (2020) 131-159
+% https://doi.org/10.1016/j.ins.2020.06.037
 % ----------------------------------------------------------------------- %
 % Input: problem structure with fields:
 %   - dimension: problem dimension

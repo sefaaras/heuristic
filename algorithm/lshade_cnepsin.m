@@ -21,7 +21,8 @@
 % Noor Awad, Mostafa Ali, Ponnuthurai Suganthan,
 % Ensemble sinusoidal differential covariance matrix adaptation with
 % Euclidean neighborhood for solving CEC2017 benchmark problems,
-% IEEE Congress on Evolutionary Computation (CEC), 2017
+% IEEE Congress on Evolutionary Computation (CEC), 2017, pp. 372-379
+% https://doi.org/10.1109/CEC.2017.7969336
 % ----------------------------------------------------------------------- %
 % Input: problem structure with fields:
 %   - dimension: problem dimension

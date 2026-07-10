@@ -13,7 +13,7 @@
 %   - Adaptive radius adjustment
 %
 % Reference:
-% Saurabh Punnathanam, Pradeep Kotecha,
+% Varun Punnathanam, Prakash Kotecha,
 % Yin-Yang-pair Optimization: A novel lightweight optimization algorithm,
 % Engineering Applications of Artificial Intelligence 54 (2016) 62-79
 % http://dx.doi.org/10.1016/j.engappai.2016.04.004

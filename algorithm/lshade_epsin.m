@@ -21,7 +21,8 @@
 % Noor Awad, Mostafa Ali, Ponnuthurai Suganthan, Robert G. Reynolds,
 % An ensemble sinusoidal parameter adaptation incorporated with
 % L-SHADE for solving CEC2014 benchmark problems,
-% IEEE Congress on Evolutionary Computation (CEC), 2016
+% IEEE Congress on Evolutionary Computation (CEC), 2016, pp. 2958-2965
+% https://doi.org/10.1109/CEC.2016.7744163
 % ----------------------------------------------------------------------- %
 % Input: problem structure with fields:
 %   - dimension: problem dimension

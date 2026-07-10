@@ -15,9 +15,9 @@
 %   3. Generalized oppositional scout bee % Scout with opposition-based learning
 %
 % Reference:
-% Teaching-Learning-Based Artificial Bee Colony (TLABC) Algorithm
-% Applied Energy, 2018
-% https://www.sciencedirect.com/science/article/pii/S0306261917318391
+% Xu Chen, Bin Xu, Congli Mei, Yuhan Ding, Kangji Li,
+% Teaching-learning-based artificial bee colony for solar photovoltaic parameter estimation,
+% Applied Energy 212 (2018) 1578-1588
 % https://doi.org/10.1016/j.apenergy.2017.12.115
 % ----------------------------------------------------------------------- %
 % Input: problem structure with fields:

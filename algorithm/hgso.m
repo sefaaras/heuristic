@@ -14,7 +14,7 @@
 %   - Uses gas solubility behavior for optimization
 %
 % Reference:
-% Fatemeh Ahmadi Hashim, Essam H. Houssein, Maimonah S. Mabrouk, 
+% Fatma A. Hashim, Essam H. Houssein, Mai S. Mabrouk,
 % Walid Al-Atabany, Seyedali Mirjalili,
 % Henry gas solubility optimization: A novel physics-based algorithm,
 % Future Generation Computer Systems, Volume 101, 2019, Pages 646-667
