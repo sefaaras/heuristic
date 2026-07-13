@@ -64,7 +64,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
     % Evaluate initial population
     [costs, FE] = calculate_fitness(coyotes', problem, FE);
-    costs = costs';  % Convert to column vector for consistency
+    costs = costs(:);  % Force column vector
     
     % Find initial best solution
     [GlobalMin, ibest] = min(costs);
