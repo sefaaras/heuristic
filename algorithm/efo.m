@@ -64,7 +64,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
     % Evaluate initial population
     [fit, FE] = calculate_fitness(em_pop', problem, FE);
-    em_pop = [em_pop, fit'];  % Attach fitness as last column (transpose to column vector)
+    em_pop = [em_pop, fit(:)];  % Attach fitness as last column
     em_pop = sortpop(em_pop, N_var + 1);  % Sort by fitness
     
     % Record initial population
