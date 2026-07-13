@@ -43,6 +43,10 @@ function [fitness, FE, is_feasible] = calculate_fitness(solutions, problem, FE)
             cd('problem/CEC2022');
         end
 
+        if lastIsRW
+            clear('cec20rw_func');
+        end
+
         [fitness, is_feasible] = eval_core(solutions, problem, lastIsRW);
 
         lastFhd = problem.fhd; lastNum = problem.number; lastDim = D;
