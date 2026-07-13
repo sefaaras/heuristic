@@ -98,6 +98,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
             Ind = round(rand) + 1;
             k = find(rand <= cumsum(FQ), 1, 'first');
+            if isempty(k), k = MarketSize; end
             CommQuantityEqu = CommQuantity(k,:);
 
             Alpha = a * sin(2 * pi * rand(1, Matr(Ind)));
@@ -107,6 +108,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 CommPriceEqu = rand * MeanPrice;
             else
                 k2 = find(rand <= cumsum(FP), 1, 'first');
+                if isempty(k2), k2 = MarketSize; end
                 CommPriceEqu = CommPrice(k2,:);
             end
 

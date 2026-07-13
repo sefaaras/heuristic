@@ -126,6 +126,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         
         for k = 1:popsize
             i = find(rand < cum_prob, 1);
+            if isempty(i), i = popsize; end
             j = randi(popsize);
             while j == i
                 j = randi(popsize);
