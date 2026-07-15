@@ -180,11 +180,9 @@ function [Whirlpool, FE] = Effectsofwhirlpools(Whirlpool, problem, FE, nVar, Var
                 for t = 1:AA(1)
                     J(t) = (abs(Whirlpool(t).Cost) ^ 1) * ((abs(sum(Whirlpool(t).Position)) - (sum(Whirlpool(i).Objects(j).Position))) ^ 0.5);
                 end
-                S = min(J);
-                [~, D] = find(S == J);
+                [~, D] = min(J);
                 d = rand(1, nVar) .* (Whirlpool(D(1)).Position - Whirlpool(i).Objects(j).Position);
-                S2 = max(J);
-                [~, D2] = find(S2 == J);
+                [~, D2] = max(J);
                 d2 = rand(1, nVar) .* (Whirlpool(D2(1)).Position - Whirlpool(i).Objects(j).Position);
             else
                 d = rand(1, nVar) .* (Whirlpool(i).Position - Whirlpool(i).Objects(j).Position);
@@ -221,8 +219,7 @@ function [Whirlpool, FE] = Effectsofwhirlpools(Whirlpool, problem, FE, nVar, Var
     for t = 1:numel(Whirlpool)
         J2(t) = Whirlpool(t).Cost;
     end
-    S2 = min(J2);
-    [~, D2] = find(S2 == J2);
+    [S2, D2] = min(J2);
     d2 = Whirlpool(D2(1)).Position;
 
     for i = 1:numel(Whirlpool)
@@ -233,8 +230,7 @@ function [Whirlpool, FE] = Effectsofwhirlpools(Whirlpool, problem, FE, nVar, Var
                 J(t) = inf;
             end
         end
-        S = min(J);
-        [~, D] = find(S == J);
+        [~, D] = min(J);
 
         Whirlpool(i).delta = Whirlpool(i).delta + rand * rand * pi;
         d = Whirlpool(D(1)).Position - Whirlpool(i).Position;
