@@ -241,11 +241,13 @@ function [pop, FE, bf, bs] = socialDistancing(ProblemParams, AlgorithmParams, po
     person.cost = [];
     person.status = [];
     [psize1, ~] = size(pop);
-    % newpop sized to the current population to avoid phantom (empty) entries
+     % newpop sized to the current population to avoid phantom (empty) entries
     newpop = repmat(person, psize1, 1);
+    nNew = 0;
 
     for i = 1:psize1
-        newpop(i).cost = inf;
+        bestCost = inf;
+        bestSol = [];
         for j = i + 1:psize1
             dij = norm(pop(i).position - pop(j).position) / ProblemParams.dmax;
             if (dij ~= 0 && (dij <= AlgorithmParams.delta))
@@ -264,17 +266,23 @@ function [pop, FE, bf, bs] = socialDistancing(ProblemParams, AlgorithmParams, po
                 [newsol.cost, FE, bf, bs] = evalp(newsol.position, problem, FE, bf, bs);
                 newsol.status = 1;
 
-                if newsol.cost <= newpop(i).cost
-                    newpop(i) = newsol;
+                if newsol.cost <= bestCost
+                    bestCost = newsol.cost;
+                    bestSol = newsol;
                 end
             end
         end
+        if ~isempty(bestSol)
+            nNew = nNew + 1;
+            newpop(nNew) = bestSol;
+        end
     end
+    newpop = newpop(1:nNew);
 
     pop = [pop; newpop];
     [~, SortOrder] = sort([pop.cost]);
     pop = pop(SortOrder);
-    pop = pop(1:AlgorithmParams.popSize);
+    pop = pop(1:min(AlgorithmParams.popSize, numel(pop)));
 end
 
 %% --- Levy flight ---
