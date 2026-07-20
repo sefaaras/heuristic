@@ -38,8 +38,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     maxFE = problem.maxFe;
 
     VarSize = [1 nVar];
-    VarMin = round(lb);
-    VarMax = round(ub);
+    VarMin = reshape(lb, 1, []);
+    VarMax = reshape(ub, 1, []);
     nPop = 50;
     MaxIt = ceil(maxFE / nPop);
     LR = 0.01;
@@ -63,6 +63,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     empty_child.Best.Drawing = [];
     empty_child.Best.Cost = [];
 
+    GlobalBest = empty_child.Best;   % keeps the Drawing field present
     GlobalBest.Cost = inf;
 
     child = repmat(empty_child, nPop, 1);
@@ -74,11 +75,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         p3 = randi([1 nVar]);
 
         child(i).Drawing = unifrnd(VarMin, VarMax, VarSize);
-        child(i).GR = child(i).Drawing(1, p2) + child(i).Drawing(1, p3) / child(i).Drawing(1, p2);
+        child(i).GR = golden_ratio(child(i).Drawing, p2, p3);
         [child(i).Cost, FE] = calculate_fitness(child(i).Drawing', problem, FE);
         child(i).Best.Drawing = child(i).Drawing;
         child(i).Best.Cost = child(i).Cost;
-        if child(i).Best.Cost < GlobalBest.Cost
+        if isempty(GlobalBest.Drawing) || isnan(GlobalBest.Cost) || ...
+                child(i).Best.Cost < GlobalBest.Cost
             GlobalBest = child(i).Best;
         end
         if FE <= maxFE
@@ -101,8 +103,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         FE_before = FE;
 
         for i = 1:nPop
-            T = randi([VarMin(1) VarMax(1)], 1);
             p1 = randi([1 nVar]);
+            T = unifrnd(VarMin(p1), VarMax(p1));
             p2 = randi([1 nVar]); %#ok<NASGU>
             p3 = randi([1 nVar]); %#ok<NASGU>
 
@@ -118,6 +120,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 SR = randi([0, 5]) / 10;
                 ncount = ncount + 1; %#ok<NASGU>
             end
+
+            child(i).Drawing = min(max(child(i).Drawing, VarMin), VarMax);
 
             [child(i).Cost, FE] = calculate_fitness(child(i).Drawing', problem, FE);
 
@@ -145,6 +149,16 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     best_solution = GlobalBest.Drawing;
     best_fitness = GlobalBest.Cost;
+end
+
+%% --- Golden Ratio of a drawing, guarded against a zero denominator ---
+function GR = golden_ratio(drawing, p2, p3)
+    denom = drawing(1, p2);
+    if denom == 0
+        GR = drawing(1, p3);          % ratio undefined; drop the divisive term
+    else
+        GR = denom + drawing(1, p3) / denom;
+    end
 end
 
 %% --- Assemble children into a matrix and record over an FE block ---
