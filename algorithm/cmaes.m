@@ -42,7 +42,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     VarSize = [1 nVar];
 
     %% CMA-ES settings
-    MaxIt = ceil(maxFE / (121 + nVar / 1.8));
+    MaxIt = maxFE;
 
     lambda = (4 + round(3 * log(nVar))) * 10;   % population size (offspring)
     mu = round(lambda / 2);                      % number of parents
@@ -146,8 +146,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(FE) = BestSol_Cost;
         end
 
-        % Update step size
-        ps = (1 - cs) * ps + sqrt(cs * (2 - cs) * mu_eff) * M_Step / chol(C)';
+        % Update step size (robust factor: never errors on a near-singular C)
+        Rchol = safe_chol(C);
+        ps = (1 - cs) * ps + sqrt(cs * (2 - cs) * mu_eff) * (M_Step / Rchol');
         sigma = sigma * exp(cs / ds * (norm(ps) / ENN - 1))^0.3;
 
         % Update covariance matrix
@@ -163,12 +164,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             C = C + cmu * w(j) * pop(j).Step' * pop(j).Step;
         end
 
-        % Enforce positive definiteness
-        [V, E] = eig(C);
-        if any(diag(E) < 0)
-            E = max(E, 0);
-            C = V * E / V;
-        end
+        % Enforce symmetry and strict positive definiteness so the next
+        % generation's chol(C) / mvnrnd(.,C) cannot fail on a degenerate C.
+        C = enforce_pd(C, nVar);
 
         M_Position = M_Position_new;
         M_Cost = M_Cost_new; %#ok<NASGU>
@@ -178,6 +176,37 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     best_solution = BestSol_Position;
     best_fitness = BestSol_Cost;
+end
+
+%% --- Robust Cholesky factor: diagonal-jitter fallback if C is not PD ---
+function R = safe_chol(C)
+    [R, p] = chol(C);
+    if p == 0, return; end
+    n = size(C, 1);
+    d = mean(diag(C));
+    if ~isfinite(d) || d <= 0, d = 1; end
+    jitter = 1e-12 * d;
+    for k = 1:30
+        [R, p] = chol(C + jitter * eye(n));
+        if p == 0, return; end
+        jitter = jitter * 10;
+    end
+    R = eye(n);   % last resort: whitening reduces to identity
+end
+
+%% --- Force C symmetric and strictly positive definite (capped condition) ---
+function C = enforce_pd(C, nVar)
+    C = (C + C') / 2;                    % strip roundoff asymmetry
+    [V, E] = eig(C);
+    e = real(diag(E));
+    emax = max(e);
+    if ~isfinite(emax) || emax <= 0
+        C = eye(nVar);                   % fully degenerate / NaN -> reset
+        return;
+    end
+    e = max(e, emax * 1e-14);            % floor eigenvalues -> strict PD, cond <= 1e14
+    C = V * diag(e) * V';
+    C = (C + C') / 2;
 end
 
 %% --- Record top-k of the sorted CMA-ES population over an FE block ---
