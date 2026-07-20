@@ -253,6 +253,6 @@ function y = Mutate(x, mu, LowerBound, UpperBound)
     j = randsample(nVar, nmu);
     sigma(1:nVar) = 0.1 * (UpperBound - LowerBound);
     y = x;
-    y(j) = x(j) + sigma(j) * (randn(size(j))');
+    y(j) = x(j) + sigma(j) .* randn(size(x(j)));
     y = max(y, LowerBound); y = min(y, UpperBound);
 end
