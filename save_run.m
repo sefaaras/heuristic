@@ -39,11 +39,18 @@ function save_run(algorithm_name, func_num, run_num, best_fitness, best_solution
     
     % Handle variable arguments based on experiment type
     if contains(experiment_name, 'cec2020rw')
-        % For CEC2020RW: varargin = {job_id, is_feasible}
+        % For CEC2020RW: varargin = {job_id, is_feasible, violation, objective}
         if length(varargin) >= 2
             run_info.is_feasible = varargin{2};
         else
             run_info.is_feasible = true; % default
+        end
+        % Mean constraint violation v(x) and raw objective f(x) of the reported
+        if length(varargin) >= 3
+            run_info.constraint_violation = varargin{3};
+        end
+        if length(varargin) >= 4
+            run_info.objective = varargin{4};
         end
         % No best_error for CEC2020RW
     else

@@ -105,7 +105,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
     %% Archive data
     arch_rate = 2.6;
-    archive.NP = arch_rate * PS1;
+    archive.NP = round(arch_rate * PS1);  % must stay integer: it indexes rndpos(1:archive.NP)
     archive.pop = zeros(0, Par.n);
     archive.funvalues = zeros(0, 1);
     
@@ -264,7 +264,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     end
     
     % Return best solution
-    best_solution = bestx;
+    best_solution = min(max(bestx, Par.xmin(:)'), Par.xmax(:)');
     best_fitness = bestold;
 end
 
@@ -791,18 +791,29 @@ function [x, f, FE, succ] = LS2(bestx, f, Par, FE, problem, Max_FES, xmin, xmax)
     
     % Create wrapper function for fmincon
     objfun = @(x_in) evaluate_for_ls(x_in, problem);
-    
-    [Xsqp, FUN, ~, details] = fmincon(objfun, bestx(1,:)', [], [], [], [], xmin, xmax, [], options);
-    
+
+    % Default: keep the incumbent. fmincon throws
+    x = bestx;
+    succ = 0;
+
+    f0 = objfun(bestx(1,:)');
+    FE = FE + 1;
+    if ~isfinite(f0)
+        return;
+    end
+
+    try
+        [Xsqp, FUN, ~, details] = fmincon(objfun, bestx(1,:)', [], [], [], [], xmin, xmax, [], options);
+    catch
+        return;
+    end
+
     if (f - FUN) > 0
         succ = 1;
         f = FUN;
         x(1,:) = Xsqp(:)';
-    else
-        succ = 0;
-        x = bestx;
     end
-    
+
     FE = FE + details.funcCount;
 end
 

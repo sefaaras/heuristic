@@ -91,6 +91,38 @@ end
 
 fprintf('Total jobs created: %d\n', total_jobs);
 
+% Stamp each results folder so a finished run can be told apart from one
+pipeline_id = 'v2';
+[git_status, pipeline_commit] = system('git rev-parse --short HEAD');
+if git_status ~= 0
+    pipeline_commit = 'nogit';
+end
+pipeline_commit = strtrim(pipeline_commit);
+stamp_name = sprintf('%s_%s_%s', pipeline_id, ...
+                     char(datetime('now', 'Format', 'yyyy-MM-dd_HH-mm-ss')), ...
+                     pipeline_commit);
+for alg_idx = 1:length(algorithms)
+    alg_dir = fullfile('results', algorithms{alg_idx});
+    if ~exist(alg_dir, 'dir')
+        mkdir(alg_dir);
+    end
+    % Existing markers (files, not the experiment sub-folders).
+    marks = dir(fullfile(alg_dir, '*_*'));
+    marks = {marks(~[marks.isdir]).name};
+    if any(startsWith(marks, [pipeline_id '_']))
+        continue;   % already stamped with this id; resuming a run, leave it be
+    end
+    if ~isempty(marks)
+        % Keep the old marker too: a folder carrying two ids is a mixed folder,
+        fprintf('NOTE: %s already carries %s -- adding %s alongside it\n', ...
+                alg_dir, strjoin(marks, ', '), stamp_name);
+    end
+    fid = fopen(fullfile(alg_dir, stamp_name), 'w');
+    if fid > 0
+        fclose(fid);
+    end
+end
+
 % Check which jobs are already completed
 fprintf('\nChecking for completed jobs...\n');
 jobs_to_run = false(total_jobs, 1);  % Logical array for jobs to run
@@ -105,7 +137,9 @@ for job_idx = 1:total_jobs
                       sprintf('F%d', job.func_num), sprintf('run%d', job.run));
     info_file = fullfile(run_dir, 'run_info.mat');
     
-    if exist(info_file, 'file')
+    % A truncated save leaves a 0-byte run_info.mat behind. exist() still sees
+    fi = dir(info_file);
+    if ~isempty(fi) && fi.bytes > 0
         completed_count = completed_count + 1;
     else
         jobs_to_run(job_idx) = true;
@@ -147,7 +181,7 @@ parfor job_idx = 1:remaining_jobs
         elseif contains(job.experiment_name, 'cec2020')
             problem.fhd = str2func('cec20_func');
         elseif contains(job.experiment_name, 'cec2021')
-            problem.fhd = str2func('cec21_basic_func');
+            problem.fhd = str2func('cec21_bias_shift_rot_func');
         elseif contains(job.experiment_name, 'cec2022')
             problem.fhd = str2func('cec22_func');
         end
@@ -186,6 +220,9 @@ parfor job_idx = 1:remaining_jobs
                 job_idx, remaining_jobs, job.experiment_name, job.alg_name, ...
                 job.func_num, job.run, job.run);
         
+        % Drop the evaluator's cached problem state so this job cannot inherit
+        calculate_fitness('reset');
+
         % Run algorithm with individual timing
         run_start = tic;
         [best_fitness, best_solution, curve, population_history, fitness_history] = feval(job.alg_name, problem);
@@ -202,11 +239,18 @@ parfor job_idx = 1:remaining_jobs
             best_error = NaN; % No error calculation for CEC2020RW
         end
         
-        % Check feasibility for the best solution
+        % Recover the raw objective f(x) and the mean constraint violation v(x)
+        % of the reported solution.
         if contains(job.experiment_name, 'cec2020rw')
-            [~, ~, is_feasible] = calculate_fitness(best_solution', problem, 0);
+            [~, ~, is_feasible, violation, objective] = ...
+                calculate_fitness(best_solution(:), problem, 0);
+            is_feasible = is_feasible(1);
+            violation   = violation(1);
+            objective   = objective(1);
         else
-            is_feasible = true;  % Other problems are unconstrained
+            is_feasible = true;   % Other problems are unconstrained
+            violation   = 0;
+            objective   = best_fitness;
         end
         
         % SAVE TO DISK
@@ -215,7 +259,7 @@ parfor job_idx = 1:remaining_jobs
                      best_fitness, best_solution, curve, ...
                      exec_time, problem, job.experiment_name, ...
                      population_history, fitness_history, ...
-                     job.id, is_feasible);
+                     job.id, is_feasible, violation, objective);
         else
             save_run(job.alg_name, job.func_num, job.run, ...
                      best_fitness, best_solution, curve, ...

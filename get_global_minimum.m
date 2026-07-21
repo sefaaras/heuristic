@@ -101,7 +101,7 @@ switch upper(competition)
             2994.424465;      % RC15: Weight Minimization of a Speed Reducer
             0.03221300814;    % RC16: Optimal Design of Industrial refrigeration System
             0.01266523278;    % RC17: Tension/compression spring design (case 1)
-            5885.332773;      % RC18: Pressure vessel design
+            5885.3327786;     % RC18: Pressure vessel design
             1.670217726;      % RC19: Welded beam design
             263.8958433;      % RC20: Three-bar truss design problem
             0.2352424579;     % RC21: Multiple disk clutch brake design problem
@@ -109,7 +109,7 @@ switch upper(competition)
             16.06986872;      % RC23: Step-cone pulley problem
             2.528791841;      % RC24: Robot gripper problem
             1616.119765;      % RC25: Hydro-static thrust bearing design problem
-            35.59231971;      % RC26: Four-stage gear box problem
+            35.359231973;     % RC26: Four-stage gear box problem
             524.4507606;      % RC27: 10-bar truss design
             14614.13571;      % RC28: Rolling element bearing
             2964895.417;      % RC29: Gas Transmission Compressor Design (GTCD)
@@ -146,7 +146,7 @@ switch upper(competition)
             4240.548253;      % RC54: Beef Cattle (case 4)
             6696.414512;      % RC55: Dairy Cattle (case 1)
             14746.58000;      % RC56: Dairy Cattle (case 2)
-            3213.291701;      % RC57: Dairy Cattle (case 3)
+            2132.9171019;     % RC57: Dairy Cattle (case 3)
         ];
         
         if func_num >= 1 && func_num <= 57
