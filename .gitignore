@@ -1,1 +1,5 @@
 results/
+
+# local campaign-repair tooling, points at an external drive
+run_missing.m
+save_missing.m
