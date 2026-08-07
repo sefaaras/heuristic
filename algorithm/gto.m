@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Artificial Gorilla Troops Optimizer (GTO) for unconstrained problems
+% Artificial Gorilla Troops Optimizer (GTO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 30   % Population size (gorillas)
@@ -20,13 +20,7 @@
 % International Journal of Intelligent Systems 36 (10) (2021) 5887-5958.
 % https://doi.org/10.1002/int.22535
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = gto(problem)
@@ -43,10 +37,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, pop_size, dim);
-    fitness_history = zeros(history_size, pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialize Silverback
@@ -69,7 +61,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = Silverback_Score;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, X, Pop_Fit, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -77,19 +69,19 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     lb = ones(1, variables_no) .* lower_bound;
     ub = ones(1, variables_no) .* upper_bound;
 
-    %% Controlling parameters
+    % Controlling parameters
     p = 0.03;
     Beta = 3;
     w = 0.8;
 
-    %% Main loop
+    % Main loop
     for It = 1:Max_iter
         if FE >= maxFE, break; end
 
         a = (cos(2 * rand) + 1) * (1 - It / Max_iter);
         C = a * (2 * rand - 1);
 
-        %% Exploration
+        % Exploration
         for i = 1:pop_size
             if rand < p
                 GX(i, :) = (ub - lb) * rand + lb;
@@ -120,13 +112,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = Silverback_Score;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, X, Pop_Fit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
         if FE >= maxFE, break; end
 
-        %% Exploitation
+        % Exploitation
         for i = 1:pop_size
             if a >= w
                 g = 2^C;
@@ -159,7 +151,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = Silverback_Score;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, X, Pop_Fit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
@@ -171,7 +163,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Silverback;
 end
 
-%% --- Initialization ---
+% Initialization
 function [X] = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -186,7 +178,7 @@ function [X] = initialization(N, dim, ub, lb)
     end
 end
 
-%% --- Boundary handling ---
+% Boundary handling
 function [X] = boundaryCheck(X, lb, ub)
     for i = 1:size(X, 1)
         FU = X(i, :) > ub;

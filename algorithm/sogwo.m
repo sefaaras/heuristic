@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
 % Selective Opposition based Grey Wolf Optimization (SOGWO)
-% for unconstrained benchmark problems
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   SearchAgents_no = 50  % Population size (number of wolves)
@@ -17,13 +16,7 @@
 % Expert Systems with Applications 151 (2020) 113389
 % https://doi.org/10.1016/j.eswa.2020.113389
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = sogwo(problem)
@@ -39,11 +32,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, SearchAgents_no, dim);
-    fitness_history = zeros(history_size, SearchAgents_no);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Max_iter = ceil(maxFE / SearchAgents_no);
@@ -112,7 +103,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = Alpha_score;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, Positions, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -162,7 +153,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function Positions = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -177,7 +168,7 @@ function Positions = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Selective Opposition Operator ---
+% Selective Opposition Operator
 function [Positions] = corOppose(Positions, fitness, ~, ~, upper, lower, ~, threshold)
     n = size(fitness);
     for i = 4:n(1)

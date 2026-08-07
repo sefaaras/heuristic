@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Pelican Optimization Algorithm (POA) for unconstrained benchmark problems
+% Pelican Optimization Algorithm (POA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   SearchAgents = 30   % Population size (pelicans)
@@ -16,8 +16,7 @@
 % Sensors 2022, 22(3), 855.
 % https://doi.org/10.3390/s22030855
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = poa(problem)
@@ -33,10 +32,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, SearchAgents, dim);
-    fitness_history = zeros(history_size, SearchAgents);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     X = initialization(SearchAgents, dim, upperbound, lowerbound);
@@ -51,7 +48,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = fbest;
             [population_history, fitness_history, history_index] = record_history(...
                 e, X, fit, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -66,7 +63,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             Xbest = X(location, :);
         end
 
-        %% PHASE 1: Moving towards prey (exploration)
+        % PHASE 1: Moving towards prey (exploration)
         k = randperm(SearchAgents, 1);
         X_FOOD = X(k, :);
         F_FOOD = fit(k);
@@ -97,12 +94,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = fbest;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, X, fit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         if FE >= maxFE, break; end
 
-        %% PHASE 2: Winging on the water surface (exploitation)
+        % PHASE 2: Winging on the water surface (exploitation)
         Xnew2 = X;
         for i = 1:SearchAgents
             Xnew2(i, :) = X(i, :) + 0.2 * (1 - t / Max_iterations) .* (2 * rand(1, dim) - 1) .* X(i, :); % Eq(6)
@@ -125,7 +122,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = fbest;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, X, fit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         if FE >= maxFE, break; end
@@ -136,7 +133,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Xbest;
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1

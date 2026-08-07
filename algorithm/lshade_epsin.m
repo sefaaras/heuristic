@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% L-SHADE-EpSin (L-SHADE with Ensemble Sinusoidal Parameter Adaptation)
+% L-SHADE with Ensemble Sinusoidal Parameter Adaptation (L-SHADE-EpSin)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 18 * D            % Initial population size
@@ -24,13 +24,19 @@
 % IEEE Congress on Evolutionary Computation (CEC), 2016, pp. 2958-2965
 % https://doi.org/10.1109/CEC.2016.7744163
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% G_Max, the horizon of the sinusoidal F schedule, is counted from the LPSR
+% population plan instead of the reference's per-dimension lookup. Counting
+% reproduces all four of its values exactly at the maxFE = 10000*D they were
+% written for, and stays right elsewhere: the table overruns by 10x on
+% cec2020_10 and 37x on cec2020_20, where gg/G_Max drives the second sinusoidal
+% form to F in [-2.3, 3.3] instead of [0, 1].
+% The Gaussian local search fires once, late under LPSR. Each popLS point is
+% evaluated exactly once and its value carried in fitness_LS, so recording that
+% subpopulation costs no evaluations of its own; the popLS initialisation is
+% folded into the curve at the FE it actually consumed.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = lshade_epsin(problem)
@@ -46,12 +52,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     freq_inti = 0.5;
     GenMaxSelected = 250;
 
-    if dim == 10,     G_Max = 2163;
-    elseif dim == 30, G_Max = 2745;
-    elseif dim == 50, G_Max = 3022;
-    else,             G_Max = 3401;
-    end
-
     p_best_rate = 0.11;
     arc_rate = 1.4;
     memory_size = 5;
@@ -59,34 +59,21 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     max_pop_size = pop_size;
     min_pop_size = 4;
 
+    G_Max = lpsr_generations(maxFE, max_pop_size, min_pop_size);
+
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History recording (store only top 100)
-    history_pop_size = 100;
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, history_pop_size, dim);
-    fitness_history = zeros(history_size, history_pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    %% Initialize the main population
+    % Initialize the main population
     popold = repmat(lu(1, :), pop_size, 1) + rand(pop_size, dim) .* repmat(lu(2, :) - lu(1, :), pop_size, 1);
     pop = popold;
 
     [fitness, FE] = calculate_fitness(pop', problem, FE);
     fitness = fitness(:);
-
-    %% Initialize LS population
-    counter = 0;
-    popsize_LS = 10;
-    popLS = repmat(lu(1, :), popsize_LS, 1) + rand(popsize_LS, dim) .* repmat(lu(2, :) - lu(1, :), popsize_LS, 1);
-    [fitness_LS, FE] = calculate_fitness(popLS', problem, FE);
-    fitness_LS = fitness_LS(:);
-
-    [~, Indecis] = sort(fitness_LS);
-    popLS = popLS(Indecis, :);
-    BestPoint = popLS(1, :);
 
     bsf_fit_var = 1e+30;
     bsf_solution = zeros(1, dim);
@@ -99,10 +86,33 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         if i <= maxFE
             curve(i) = bsf_fit_var;
             [population_history, fitness_history, history_index] = record_top_k(...
-                i, pop, fitness', history_pop_size, dim, ...
-                population_history, fitness_history, history_index, sampling_interval, history_size);
+                i, pop, fitness', ...
+                population_history, fitness_history, history_index, maxFE);
         end
     end
+
+    % Initialize LS population
+    counter = 0;
+    popsize_LS = 10;
+    popLS = repmat(lu(1, :), popsize_LS, 1) + rand(popsize_LS, dim) .* repmat(lu(2, :) - lu(1, :), popsize_LS, 1);
+    FE_before = FE;
+    [fitness_LS, FE] = calculate_fitness(popLS', problem, FE);
+    fitness_LS = fitness_LS(:);
+
+    % These land after the main population, so the curve carries on from there
+    for i = 1:popsize_LS
+        if fitness_LS(i) < bsf_fit_var
+            bsf_fit_var = fitness_LS(i);
+            bsf_solution = popLS(i, :);
+        end
+        if FE_before + i <= maxFE
+            curve(FE_before + i) = bsf_fit_var;
+        end
+    end
+
+    [fitness_LS, Indecis] = sort(fitness_LS);
+    popLS = popLS(Indecis, :);
+    BestPoint = popLS(1, :);
 
     memory_sf = 0.5 .* ones(memory_size, 1);
     memory_cr = 0.5 .* ones(memory_size, 1);
@@ -113,7 +123,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     archive.pop = zeros(0, dim);
     archive.funvalues = zeros(0, 1);
 
-    %% Main loop
+    % Main loop
     gg = 0;
 
     while FE < maxFE
@@ -199,8 +209,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if eval_count >= 1 && eval_count <= maxFE
                 curve(eval_count) = bsf_fit_var;
                 [population_history, fitness_history, history_index] = record_top_k(...
-                    eval_count, pop, fitness', history_pop_size, dim, ...
-                    population_history, fitness_history, history_index, sampling_interval, history_size);
+                    eval_count, pop, fitness', ...
+                    population_history, fitness_history, history_index, maxFE);
             end
         end
 
@@ -245,7 +255,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        %% Linear population size reduction
+        % Linear population size reduction
         plan_pop_size = round((((min_pop_size - max_pop_size) / maxFE) * FE) + max_pop_size);
 
         if pop_size > plan_pop_size
@@ -271,7 +281,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        %% Gaussian Local Search (activated when NP <= 20 for the first time)
+        % Gaussian Local Search (activated when NP <= 20 for the first time)
         if pop_size <= 20
             counter = counter + 1;
         end
@@ -303,21 +313,20 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     end
 
                     popLS(i, :) = GeneratePoint;
+                    fitness_LS(i) = fit_val;
 
                     if FE <= maxFE
                         curve(FE) = bsf_fit_var;
                     end
                 end
 
-                [ls_fits, FE] = calculate_fitness(popLS', problem, FE);
-                ls_fits = ls_fits(:)';
-                [~, SortedIndex] = sort(ls_fits);
+                [population_history, fitness_history, history_index] = record_top_k(...
+                    FE, popLS, fitness_LS, ...
+                    population_history, fitness_history, history_index, maxFE);
+
+                [fitness_LS, SortedIndex] = sort(fitness_LS);
                 popLS = popLS(SortedIndex, :);
                 BestPoint = popLS(1, :);
-
-                if FE <= maxFE
-                    curve(FE) = bsf_fit_var;
-                end
             end
         end
 
@@ -330,25 +339,26 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = bsf_solution;
 end
 
-%% --- Helper Functions ---
+% Helper Functions
 
 function [pop_hist, fit_hist, hist_idx] = record_top_k(...
-    current_fe, population, fitness, history_pop_size, dim, ...
-    pop_hist, fit_hist, hist_idx, sampling_interval, history_size)
-    if mod(current_fe, sampling_interval) == 0 || hist_idx <= history_size
-        if hist_idx <= history_size
-            current_size = size(population, 1);
-            [sorted_fit, sorted_idx] = sort(fitness);
-            top_k = min(history_pop_size, current_size);
-            rec_pop = NaN(history_pop_size, dim);
-            rec_fit = NaN(1, history_pop_size);
-            rec_pop(1:top_k, :) = population(sorted_idx(1:top_k), :);
-            rec_fit(1:top_k) = sorted_fit(1:top_k);
-            pop_hist(hist_idx, :, :) = rec_pop;
-            fit_hist(hist_idx, :) = rec_fit;
-            hist_idx = hist_idx + 1;
-        end
+    current_fe, population, fitness, ...
+    pop_hist, fit_hist, hist_idx, maxFE)
+% Kept for existing call sites; record_history stores population metrics, not raw positions
+    [pop_hist, fit_hist, hist_idx] = record_history(current_fe, population, fitness, ...
+        pop_hist, fit_hist, hist_idx, maxFE);
+end
+
+function g = lpsr_generations(maxFE, max_pop_size, min_pop_size)
+% Generations the linear population size reduction plan allows on this budget
+    g = 0;
+    fe = 0;
+    while fe < maxFE
+        fe = fe + max(min_pop_size, ...
+                      round(((min_pop_size - max_pop_size) / maxFE) * fe + max_pop_size));
+        g = g + 1;
     end
+    g = max(1, g - 1);
 end
 
 function p = Bound_Checking(p, lowB, upB)

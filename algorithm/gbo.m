@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Gradient-Based Optimizer (GBO) Algorithm
+% Gradient-Based Optimizer (GBO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nP = 50                      % Population size
@@ -18,22 +18,16 @@
 % Information Sciences 540 (2020) 131-159
 % https://doi.org/10.1016/j.ins.2020.06.037
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = gbo(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % Algorithm parameters
     nP = 50;                      % Population size
@@ -41,13 +35,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     MaxIt = floor(maxFE / nP);    % Maximum iterations
     
     FE = 0;                       % Function Evaluation Counter
-    curve = zeros(1, maxFE);      % Convergence curve
+    curve = zeros(1, maxFE);
     
     % Initialize storage for population and fitness history
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nP, dim);
-    fitness_history = zeros(history_size, nP);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Initialize population
@@ -70,11 +62,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = Best_Cost;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, X, Cost, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
     
-    %% Main Loop
+    % Main Loop
     it = 0;
     while FE < maxFE
         it = it + 1;
@@ -169,7 +161,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = Best_Cost;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, X, Cost, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -183,7 +175,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Helper Functions ---
+% Helper Functions
 
 % Gradient Search Rule
 function GSR = GradientSearchRule(ro1, Best_X, Worst_X, X, Xr1, DM, eps, Xm, Flag)

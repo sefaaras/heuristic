@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Social Spider Optimization (SSO) for unconstrained benchmark problems
+% Social Spider Optimization (SSO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   spidn = 50            % Colony size (number of spiders)
@@ -20,14 +20,17 @@
 % social-spider,
 % Expert Systems with Applications 40(16) (2013) 6374-6384
 % https://doi.org/10.1016/j.eswa.2013.05.041
+%
+% Implementation Note:
+%   The reference draws every dimension from lb(1)..ub(1) and normalises its
+%   distances by that one span. Both now read the real per-dimension bounds --
+%   identical wherever the box is uniform, which is every numeric CEC suite, but
+%   on CEC2020RW the spans run 1e-2..1e6 and the population was being initialised
+%   into dimension 1's range and then clamped by the evaluator. The distance
+%   scale stays a scalar, as it divides a norm; mean(ub - lb) equals the
+%   reference's ub(1) - lb(1) on a uniform box.
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = sso(problem)
@@ -55,28 +58,26 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, spidn, dims);
-    fitness_history = zeros(history_size, spidn);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    % ---- Population initialisation ----
+    % Population initialisation
     fsp = zeros(fn, dims);
     msp = zeros(mn, dims);
     for i = 1:fn
-        fsp(i, 1:dims) = lb(1) + rand(1, dims) .* (ub(1) - lb(1));
+        fsp(i, 1:dims) = lb + rand(1, dims) .* (ub - lb);
     end
     for i = 1:mn
-        msp(i, 1:dims) = lb(1) + rand(1, dims) .* (ub(1) - lb(1));
+        msp(i, 1:dims) = lb + rand(1, dims) .* (ub - lb);
     end
 
-    % ---- Evaluations ----
+    % Evaluations
     [fefit, FE] = calculate_fitness(fsp', problem, FE);  fefit = fefit(:);
     [mafit, FE] = calculate_fitness(msp', problem, FE);  mafit = mafit(:);
 
-    % ---- Assign weights ----
+    % Assign weights
     spfit = [fefit; mafit];
     bfitw = min(spfit);
     wfit = max(spfit);
@@ -84,7 +85,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     fewei = spwei(1:fn);
     mawei = spwei(fn + 1:spidn);
 
-    % ---- Memory of the best ----
+    % Memory of the best
     [~, Ibe] = max(spwei);
     if Ibe > fn
         spbest = msp(Ibe - fn, :);
@@ -100,11 +101,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = bfit;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, [fsp; msp], spfit, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
-    % ---- Iterations ----
+    % Iterations
     i = 0;
     while FE < maxFE
         i = i + 1;
@@ -166,7 +167,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = bfit;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, [fsp; msp], spfit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -176,11 +177,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Female movement ---
+% Female movement
 function [fsp] = FeMove(spidn, fn, fsp, msp, spbest, Ibe, spmass, d, lb, ub, pm)
     dt1 = zeros(1, fn);
     dt2 = zeros(1, spidn - fn);
-    scale = (-lb(1) + ub(1));
+    scale = mean(ub - lb);
     for i = 1:fn
         for j = 1:fn
             if spmass(j) > spmass(i)
@@ -241,10 +242,10 @@ function [fsp] = FeMove(spidn, fn, fsp, msp, spbest, Ibe, spmass, d, lb, ub, pm)
     end
 end
 
-%% --- Male movement ---
+% Male movement
 function [msp] = MaMove(fn, mn, fsp, msp, femass, mamass, d, lb, ub, pm)
     dt = zeros(1, mn);
-    scale = (-lb(1) + ub(1));
+    scale = mean(ub - lb);
     [Indb, ~] = find(mamass >= median(mamass));
     for i = 1:mn
         if ismember(i, Indb)
@@ -292,7 +293,7 @@ function [msp] = MaMove(fn, mn, fsp, msp, femass, mamass, d, lb, ub, pm)
     end
 end
 
-%% --- Mating operator ---
+% Mating operator
 function [ofsp] = Mating(femass, mamass, fsp, msp, dims)
     ofsp = [];
     cont = 1;
@@ -347,7 +348,7 @@ function [ofsp] = Mating(femass, mamass, fsp, msp, dims)
     end
 end
 
-%% --- Survival / offspring replacement ---
+% Survival / offspring replacement
 function [fsp, msp, fefit, mafit, FE] = Survive(fsp, msp, ofspr, fefit, mafit, spfit, fn, problem, FE)
     [n1, ~] = size(ofspr);
     offit = zeros(1, n1);

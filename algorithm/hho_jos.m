@@ -9,7 +9,7 @@
 %   - Standard Harris Hawks Optimization (soft/hard besiege, team dives)
 %   - Joint Opposite Selection (JOS) = Selective Leading Opposition (SLO)
 %     applied each iteration + Dynamic Opposite (DO) applied with prob. Jr
-%   Energy E1 decays 2 -> 0 over the evaluation budget.
+%   - Energy E1 decays 2 -> 0 over the evaluation budget
 %
 % Reference:
 % Fedhila Arini, Sirapat Chiewchanwattana, Chitsutha Soomlek, Khamron Sunat,
@@ -19,8 +19,16 @@
 % https://doi.org/10.1016/j.eswa.2021.116001
 % Base HHO: Heidari et al., Future Generation Computer Systems 97 (2019) 849-872.
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Implementation Note:
+% All evaluations go through a helper that clamps to the box and returns the
+% clamped point, so the stored individual matches what was evaluated. The HHO
+% reference leaves the rabbit-dive candidates X1 and X2 unbounded, and the
+% numeric CEC mex evaluates outside the box without complaint.
+% A hawk that moves without being evaluated in the same pass is clamped only
+% before the next evaluation, so a mid-pass sample can hold out-of-box rows;
+% clamping it at move time would feed a different mean(X) into Eq. (3).
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = hho_jos(problem)
@@ -36,10 +44,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Rabbit_Location = zeros(1, dim);
@@ -55,11 +61,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     % Dynamic Opposite (DO) on the initial population
     X = dynamic_opposite(X, ub, lb, dim, N);
 
-    fitness = zeros(1, N);
-    % --- Initial evaluation ---
+    fitness = inf(1, N);
+    % Initial evaluation
     for i = 1:N
         X(i, :) = clampv(X(i, :), ub, lb);
-        [f, FE] = calculate_fitness(X(i, :)', problem, FE);
+        [f, FE, X(i, :)] = evalb(X(i, :), problem, FE);
         fitness(i) = f;
         if fitness(i) < Rabbit_Energy
             Rabbit_Energy = fitness(i);
@@ -71,9 +77,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         end
         if FE <= maxFE
             curve(FE) = bsf;
+        end
+        % fitness is still unset past i, so the population is only worth
+        % recording once every hawk has been evaluated
+        if i == N && FE <= maxFE
             [population_history, fitness_history, history_index] = record_history(...
                 FE, X, fitness, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
     upper = max(upper, max(X, [], 1)); lower = min(lower, min(X, [], 1));
@@ -82,10 +92,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         E1 = 2 * (1 - FE / maxFE);   % decaying energy over the budget
         threshold = E1;
 
+        % Hawks as they stood when fitness was measured; an entry moves only once
+        % that hawk has been re-evaluated below, so the pair stays whole
+        Xrec = X;
+
         % Selective Leading Opposition (SLO)
         X = corOppose2(X, ub, lb, upper, lower, threshold, Rabbit_Row_Id);
 
-        % --- HHO movement ---
+        % HHO movement
         for i = 1:N
             E0 = 2 * rand() - 1;
             Escaping_Energy = E1 * E0;
@@ -113,20 +127,18 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 if r < 0.5 && abs(Escaping_Energy) >= 0.5
                     Jump_strength = 2 * (1 - rand());
                     X1 = Rabbit_Location - Escaping_Energy * abs(Jump_strength * Rabbit_Location - X(i, :));
-                    [fX1, FE] = calculate_fitness(X1', problem, FE);
-                    [fXi, FE] = calculate_fitness(X(i, :)', problem, FE);
-                    [bsf, best_pos, curve, population_history, fitness_history, history_index] = ...
-                        trackfe(fX1, X1, fXi, X(i, :), bsf, best_pos, curve, FE, maxFE, X, fitness, ...
-                        population_history, fitness_history, history_index, sampling_interval, history_size);
+                    [fX1, FE, X1] = evalb(X1, problem, FE);
+                    [fXi, FE, X(i, :)] = evalb(X(i, :), problem, FE);
+                    [bsf, best_pos, curve] = ...
+                        trackfe(fX1, X1, fXi, X(i, :), bsf, best_pos, curve, FE, maxFE);
                     if fX1 < fXi
                         X(i, :) = X1;
                     else
                         X2 = Rabbit_Location - Escaping_Energy * abs(Jump_strength * Rabbit_Location - X(i, :)) + rand(1, dim) .* Levy(dim);
-                        [fX2, FE] = calculate_fitness(X2', problem, FE);
-                        [fXi2, FE] = calculate_fitness(X(i, :)', problem, FE);
-                        [bsf, best_pos, curve, population_history, fitness_history, history_index] = ...
-                            trackfe(fX2, X2, fXi2, X(i, :), bsf, best_pos, curve, FE, maxFE, X, fitness, ...
-                            population_history, fitness_history, history_index, sampling_interval, history_size);
+                        [fX2, FE, X2] = evalb(X2, problem, FE);
+                        [fXi2, FE, X(i, :)] = evalb(X(i, :), problem, FE);
+                        [bsf, best_pos, curve] = ...
+                            trackfe(fX2, X2, fXi2, X(i, :), bsf, best_pos, curve, FE, maxFE);
                         if fX2 < fXi2
                             X(i, :) = X2;
                         end
@@ -135,20 +147,18 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 if r < 0.5 && abs(Escaping_Energy) < 0.5
                     Jump_strength = 2 * (1 - rand());
                     X1 = Rabbit_Location - Escaping_Energy * abs(Jump_strength * Rabbit_Location - mean(X));
-                    [fX1, FE] = calculate_fitness(X1', problem, FE);
-                    [fXi, FE] = calculate_fitness(X(i, :)', problem, FE);
-                    [bsf, best_pos, curve, population_history, fitness_history, history_index] = ...
-                        trackfe(fX1, X1, fXi, X(i, :), bsf, best_pos, curve, FE, maxFE, X, fitness, ...
-                        population_history, fitness_history, history_index, sampling_interval, history_size);
+                    [fX1, FE, X1] = evalb(X1, problem, FE);
+                    [fXi, FE, X(i, :)] = evalb(X(i, :), problem, FE);
+                    [bsf, best_pos, curve] = ...
+                        trackfe(fX1, X1, fXi, X(i, :), bsf, best_pos, curve, FE, maxFE);
                     if fX1 < fXi
                         X(i, :) = X1;
                     else
                         X2 = Rabbit_Location - Escaping_Energy * abs(Jump_strength * Rabbit_Location - mean(X)) + rand(1, dim) .* Levy(dim);
-                        [fX2, FE] = calculate_fitness(X2', problem, FE);
-                        [fXi2, FE] = calculate_fitness(X(i, :)', problem, FE);
-                        [bsf, best_pos, curve, population_history, fitness_history, history_index] = ...
-                            trackfe(fX2, X2, fXi2, X(i, :), bsf, best_pos, curve, FE, maxFE, X, fitness, ...
-                            population_history, fitness_history, history_index, sampling_interval, history_size);
+                        [fX2, FE, X2] = evalb(X2, problem, FE);
+                        [fXi2, FE, X(i, :)] = evalb(X(i, :), problem, FE);
+                        [bsf, best_pos, curve] = ...
+                            trackfe(fX2, X2, fXi2, X(i, :), bsf, best_pos, curve, FE, maxFE);
                         if fX2 < fXi2
                             X(i, :) = X2;
                         end
@@ -164,11 +174,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             X = dynamic_opposite(X, ub, lb, dim, N);
         end
 
-        % --- Evaluate the population ---
+        % Evaluate the population
+        X = min(max(X, lb), ub);
         for i = 1:N
-            X(i, :) = clampv(X(i, :), ub, lb);
-            [f, FE] = calculate_fitness(X(i, :)', problem, FE);
+            [f, FE, X(i, :)] = evalb(X(i, :), problem, FE);
             fitness(i) = f;
+            Xrec(i, :) = X(i, :);
             if fitness(i) < Rabbit_Energy
                 Rabbit_Energy = fitness(i);
                 Rabbit_Location = X(i, :);
@@ -180,8 +191,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if FE <= maxFE
                 curve(FE) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
-                    FE, X, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    FE, Xrec, fitness, population_history, fitness_history, ...
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
@@ -193,23 +204,21 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = best_pos;
 end
 
-%% --- Track best-so-far / curve for a pair of trial evaluations ---
-function [bsf, best_pos, curve, ph, fh, hi] = trackfe(fA, A, fB, B, bsf, best_pos, curve, FE, maxFE, X, fitness, ph, fh, hi, si, hs)
+% Track best-so-far / curve for a pair of trial evaluations
+function [bsf, best_pos, curve] = trackfe(fA, A, fB, B, bsf, best_pos, curve, FE, maxFE)
     % Two evaluations were just performed in order (A at FE-1, then B at FE).
     e1 = FE - 1; e2 = FE;
     if fA < bsf, bsf = fA; best_pos = A; end   % first eval (A) at FE-1
     if e1 >= 1 && e1 <= maxFE
         curve(e1) = bsf;
-        [ph, fh, hi] = record_history(e1, X, fitness, ph, fh, hi, si, hs);
     end
     if fB < bsf, bsf = fB; best_pos = B; end   % second eval (B) at FE
     if e2 >= 1 && e2 <= maxFE
         curve(e2) = bsf;
-        [ph, fh, hi] = record_history(e2, X, fitness, ph, fh, hi, si, hs);
     end
 end
 
-%% --- Dynamic Opposite (DO) ---
+% Dynamic Opposite (DO)
 function X = dynamic_opposite(X, ub, lb, dim, N)
     for i = 1:N
         OP = ((ub - lb) .* rand(size(lb))) + lb - X(i, :);
@@ -223,7 +232,7 @@ function X = dynamic_opposite(X, ub, lb, dim, N)
     end
 end
 
-%% --- Selective Leading Opposition (SLO) ---
+% Selective Leading Opposition (SLO)
 function Positions = corOppose2(Positions, ~, ~, upper, lower, threshold, Rabbit_Row_Id)
     [n, b] = size(Positions);
     for i = 1:n
@@ -254,7 +263,13 @@ function Positions = corOppose2(Positions, ~, ~, upper, lower, threshold, Rabbit
     end
 end
 
-%% --- Levy flight (1 x d) ---
+% Objective evaluation: clamps to the box and returns the clamped position
+function [z, FE, pos] = evalb(pos, problem, FE)
+    pos = min(max(pos, problem.lb), problem.ub);
+    [z, FE] = calculate_fitness(pos', problem, FE);
+end
+
+% Levy flight (1 x d)
 function o = Levy(d)
     beta = 1.5;
     sigma = (gamma(1 + beta) * sin(pi * beta / 2) / (gamma((1 + beta) / 2) * beta * 2^((beta - 1) / 2)))^(1 / beta);
@@ -263,7 +278,7 @@ function o = Levy(d)
     o = step;
 end
 
-%% --- Initialization ---
+% Initialization
 function X = initialization(N, dim, up, down)
     if size(up, 1) == 1
         X = rand(N, dim) .* repmat((up - down), N, 1) + repmat(down, N, 1);
@@ -275,7 +290,7 @@ function X = initialization(N, dim, up, down)
     end
 end
 
-%% --- Clamp ---
+% Clamp
 function a = clampv(a, ub, lb)
     FU = a > ub; FL = a < lb;
     a = (a .* (~(FU + FL))) + ub .* FU + lb .* FL;

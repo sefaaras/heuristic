@@ -1,10 +1,10 @@
 % ----------------------------------------------------------------------- %
-% Golden Eagle Optimizer (GEO) for unconstrained benchmark problems
+% Golden Eagle Optimizer (GEO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   PopulationSize = 50   % Population size (eagles)
-%   AttackPropensity: linspace 0.5 -> 2   (exploitation grows over time)
-%   CruisePropensity: linspace 1   -> 0.5 (exploration shrinks over time)
+%   AttackPropensity = 0.5 -> 2 (linear)    % Exploitation grows over the run
+%   CruisePropensity = 1 -> 0.5 (linear)    % Exploration shrinks over the run
 %
 % Algorithm Concept:
 %   - Each eagle spirals toward a prey chosen from the flock memory
@@ -18,8 +18,7 @@
 % Computers & Industrial Engineering 152 (2021) 107050.
 % https://doi.org/10.1016/j.cie.2020.107050
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = geo(problem)
@@ -36,10 +35,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, PopulationSize, dim);
-    fitness_history = zeros(history_size, PopulationSize);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Attack / cruise propensity sweep over the actual iteration budget
@@ -61,7 +58,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 e, x, FitnessScores, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -133,7 +130,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, x, FitnessScores, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -145,12 +142,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = best_pos;
 end
 
-%% --- Row-wise L2 norm (column vector of length = #rows) ---
+% Row-wise L2 norm (column vector of length = #rows)
 function n = rownorm(A)
     n = sqrt(sum(A.^2, 2));
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1

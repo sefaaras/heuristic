@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% L-SHADE (Success-History Based DE with Linear Population Size Reduction)
+% Success-History Based DE with Linear Population Size Reduction (L-SHADE)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 18 * D            % Initial population size
@@ -19,13 +19,7 @@
 % Size Reduction, IEEE Congress on Evolutionary Computation (CEC), 2014, pp. 1658-1665
 % https://doi.org/10.1109/CEC.2014.6900380
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = lshade(problem)
@@ -48,15 +42,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History recording (store only top 100 to save disk space)
-    history_pop_size = 100;
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, history_pop_size, dim);
-    fitness_history = zeros(history_size, history_pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    %% Initialize the main population
+    % Initialize the main population
     popold = repmat(lu(1, :), pop_size, 1) + rand(pop_size, dim) .* repmat(lu(2, :) - lu(1, :), pop_size, 1);
     pop = popold;
 
@@ -74,8 +64,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         if i <= maxFE
             curve(i) = bsf_fit_var;
             [population_history, fitness_history, history_index] = record_top_k(...
-                i, pop, fitness', history_pop_size, dim, ...
-                population_history, fitness_history, history_index, sampling_interval, history_size);
+                i, pop, fitness', ...
+                population_history, fitness_history, history_index, maxFE);
         end
     end
 
@@ -87,7 +77,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     archive.pop = zeros(0, dim);
     archive.funvalues = zeros(0, 1);
 
-    %% Main loop
+    % Main loop
     while FE < maxFE
         pop = popold;
         [~, sorted_index] = sort(fitness, 'ascend');
@@ -150,8 +140,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if eval_count >= 1 && eval_count <= maxFE
                 curve(eval_count) = bsf_fit_var;
                 [population_history, fitness_history, history_index] = record_top_k(...
-                    eval_count, pop, fitness', history_pop_size, dim, ...
-                    population_history, fitness_history, history_index, sampling_interval, history_size);
+                    eval_count, pop, fitness', ...
+                    population_history, fitness_history, history_index, maxFE);
             end
         end
 
@@ -189,7 +179,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        %% Linear population size reduction
+        % Linear population size reduction
         plan_pop_size = round((((min_pop_size - max_pop_size) / maxFE) * FE) + max_pop_size);
 
         if pop_size > plan_pop_size
@@ -223,25 +213,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = bsf_solution;
 end
 
-%% --- Helper Functions ---
+% Helper Functions
 
 function [pop_hist, fit_hist, hist_idx] = record_top_k(...
-    current_fe, population, fitness, history_pop_size, dim, ...
-    pop_hist, fit_hist, hist_idx, sampling_interval, history_size)
-    if mod(current_fe, sampling_interval) == 0 || hist_idx <= history_size
-        if hist_idx <= history_size
-            current_size = size(population, 1);
-            [sorted_fit, sorted_idx] = sort(fitness);
-            top_k = min(history_pop_size, current_size);
-            rec_pop = NaN(history_pop_size, dim);
-            rec_fit = NaN(1, history_pop_size);
-            rec_pop(1:top_k, :) = population(sorted_idx(1:top_k), :);
-            rec_fit(1:top_k) = sorted_fit(1:top_k);
-            pop_hist(hist_idx, :, :) = rec_pop;
-            fit_hist(hist_idx, :) = rec_fit;
-            hist_idx = hist_idx + 1;
-        end
-    end
+    current_fe, population, fitness, ...
+    pop_hist, fit_hist, hist_idx, maxFE)
+% Kept for existing call sites; record_history stores population metrics, not raw positions
+    [pop_hist, fit_hist, hist_idx] = record_history(current_fe, population, fitness, ...
+        pop_hist, fit_hist, hist_idx, maxFE);
 end
 
 function vi = boundConstraint(vi, pop, lu)

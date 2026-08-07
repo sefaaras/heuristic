@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Chimp Optimization Algorithm (ChOA) for unconstrained benchmark problems
+% Chimp Optimization Algorithm (ChOA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   SearchAgents_no = 30   % Population size
@@ -18,13 +18,7 @@
 % Expert Systems with Applications 149 (2020) 113338
 % https://doi.org/10.1016/j.eswa.2020.113338
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = choa(problem)
@@ -41,10 +35,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     curve = zeros(1, maxFE);
 
     % History storage
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, SearchAgents_no, dim);
-    fitness_history = zeros(history_size, SearchAgents_no);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialize Attacker, Barrier, Chaser, and Driver
@@ -97,7 +89,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = Attacker_score;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, Positions, fitness', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -148,7 +140,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Attacker_pos;
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function Positions = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1

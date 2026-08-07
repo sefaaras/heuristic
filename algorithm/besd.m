@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Bezier Search Differential Evolution (BeSD) for unconstrained benchmark
-% problems
+% Bezier Search Differential Evolution (BeSD)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 30                % Sub-pattern size (population per cycle)
@@ -19,13 +18,19 @@
 % Expert Systems with Applications 165 (2021) 113875
 % https://doi.org/10.1016/j.eswa.2020.113875
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% The boundary repair indexes the bound vectors: the reference compares a scalar
+% coordinate against the whole low/up vector, so on a uniform box it happens to
+% work and on CEC2020RW's per-dimension bounds it only fires when the value is
+% outside every bound at once. It also fires on a non-finite coordinate. The
+% step size a .* b.^c overflows to Inf, and Inf times an exactly zero difference
+% is NaN, which passes both magnitude tests; MATLAB's min/max then drop the NaN,
+% so the evaluator scores such a row at a clamped point and the run reports a
+% real fitness for an all-NaN best_solution. The initial pattern matrix is
+% clamped as well -- the reference's own "rand .* ((up - low) + low)" line
+% reduces to rand .* up and is kept, since it is the published initialisation.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = besd(problem)
@@ -41,11 +46,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, D);
-    fitness_history = zeros(history_size, N);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     maxcycle = ceil(maxFE / N);
@@ -56,6 +59,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     for i = 1:K * N
         S(i, :) = rand(1, D) .* ((up - low) + low);   % LINE 2 (kept as in the reference)
     end
+    S = min(max(S, low), up);
     [fitS, FE] = calculate_fitness(S', problem, FE);
     fitS = fitS(:)';
     [gmin, ind] = min(fitS);          % LINE 4
@@ -66,7 +70,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = gmin;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, S(1:N, :), fitS(1:N), population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -118,11 +122,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             T(iii, :) = P(iii, :) + map(iii, :) .* F(iii) .* (w1(iii) .* (dv2(iii, :) - P(iii, :)) + w2(iii) .* (dv1(iii, :) - P(iii, :)));
         end
 
-        % Boundary control mechanism (LINE 32)
+        % Boundary control mechanism (LINE 32); ~isfinite also catches the NaN step
         for i = 1:N
             for index = 1:D
-                if T(i, index) < low, T(i, index) = rand * (up(index) - low(index)) + low(index); end
-                if T(i, index) > up,  T(i, index) = rand * (up(index) - low(index)) + low(index); end
+                if ~isfinite(T(i, index)) || T(i, index) < low(index) || T(i, index) > up(index)
+                    T(i, index) = rand * (up(index) - low(index)) + low(index);
+                end
             end
         end
 
@@ -147,7 +152,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = gmin;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, P, fitP, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -157,7 +162,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Generation of crossover control matrix map (LINES 23-27) ---
+% Generation of crossover control matrix map (LINES 23-27)
 function [map1, map2] = genmap(N, D)
     map1 = zeros(N, D);
     map2 = zeros(N, D);

@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Phasor Particle Swarm Optimization (PPSO) for unconstrained benchmark
-% problems
+% Phasor Particle Swarm Optimization (PPSO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   npop = 40             % Swarm size
@@ -17,13 +16,7 @@
 % Soft Computing 23 (2019) 9701-9718
 % https://doi.org/10.1007/s00500-018-3536-8
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = ppso(problem)
@@ -41,28 +34,29 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, npop, nvar);
-    fitness_history = zeros(history_size, npop);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     delta    = zeros(npop, 1);
     velocity = zeros(npop, nvar);
     position = zeros(npop, nvar);
-    cost     = zeros(npop, 1);
     pbest    = zeros(npop, nvar);
     pbestcost = zeros(npop, 1);
     gbestcost = inf;
     gbest = zeros(1, nvar);
 
-    % ---- Initialisation ----
+    % Initialisation
     for i = 1:npop
         velocity(i, :) = zeros(1, nvar);
         delta(i) = unifrnd(0, 2 * pi);
         position(i, :) = xmin + (xmax - xmin) .* rand(1, nvar);
+    end
 
+    % An unevaluated particle keeps Inf, so it cannot pose as the best of the swarm
+    cost = inf(npop, 1);
+    for i = 1:npop
         [cost(i), FE] = calculate_fitness(position(i, :)', problem, FE);
 
         pbest(i, :) = position(i, :);
@@ -75,13 +69,17 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
         if FE >= 1 && FE <= maxFE
             curve(FE) = gbestcost;
+        end
+        % cost is still Inf past i, so the swarm is only worth recording once
+        % every particle has been evaluated
+        if i == npop && FE >= 1 && FE <= maxFE
             [population_history, fitness_history, history_index] = record_history(...
                 FE, position, cost, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
-    % ---- Main loop ----
+    % Main loop
     while FE < maxFE
         for i = 1:npop
             if FE >= maxFE
@@ -117,7 +115,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = gbestcost;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, position, cost, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end

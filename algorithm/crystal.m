@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Crystal Structure Algorithm (CryStAl) for unconstrained problems
+% Crystal Structure Algorithm (CryStAl)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   Cr_Number = 10   % Number of crystals (population)
@@ -16,13 +16,7 @@
 % IEEE Access 9 (2021) 71244-71261.
 % https://doi.org/10.1109/ACCESS.2021.3079161
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = crystal(problem)
@@ -38,10 +32,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, Cr_Number, Var_Number);
-    fitness_history = zeros(history_size, Cr_Number);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     if length(LB) == 1
@@ -51,7 +43,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         UB = repmat(UB, 1, Var_Number);
     end
 
-    %% Initialization
+    % Initialization
     Crystal = zeros(Cr_Number, Var_Number);
     Fun_eval = zeros(1, Cr_Number);
     for i = 1:Cr_Number
@@ -69,13 +61,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, Crystal, Fun_eval, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
-    %% Search process
+    % Search process
     Iter = 1;
-    while Iter < MaxIteation && FE < maxFE
+    while Iter <= MaxIteation && FE < maxFE
         for i = 1:Cr_Number
             % Main crystal
             Crmain = Crystal(randperm(Cr_Number, 1), :);
@@ -107,7 +99,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = bsf;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, Crystal, Fun_eval, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 if FE >= maxFE, break; end
             end
@@ -124,7 +116,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = BestFitness;
 end
 
-%% --- Boundary handling ---
+% Boundary handling
 function x = bound(x, UB, LB)
     x(x > UB) = UB(x > UB);
     x(x < LB) = LB(x < LB);

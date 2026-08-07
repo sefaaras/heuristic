@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Exponential Distribution Optimizer (EDO) for benchmark problems
+% Exponential Distribution Optimizer (EDO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 30   % Population size
@@ -17,8 +17,7 @@
 % Artificial Intelligence Review 56 (2023) 9329-9400.
 % https://doi.org/10.1007/s10462-023-10403-9
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = edo(problem)
@@ -34,10 +33,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, Dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Xwinners = initialization(N, Dim, UB, LB);
@@ -52,7 +49,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = BestFitness;
             [population_history, fitness_history, history_index] = record_history(...
                 e, Xwinners, Fitness, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -118,7 +115,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = BestFitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, Xwinners, Fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -130,7 +127,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = BestSol;
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -143,7 +140,7 @@ function Positions = initialization(N, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Multi-Verse Optimizer (MVO) for unconstrained benchmark problems
+% Multi-Verse Optimizer (MVO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 60                % Population size (number of universes)
@@ -20,13 +20,7 @@
 % Neural Computing and Applications 27 (2016) 495-513
 % https://doi.org/10.1007/s00521-015-1870-7
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = mvo(problem)
@@ -42,11 +36,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Best universe (elite) tracking
@@ -89,6 +81,16 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if Inflation_rates(1, i) < Best_universe_Inflation_rate
                 Best_universe_Inflation_rate = Inflation_rates(1, i);
                 Best_universe = Universes(i, :);
+            end
+        end
+
+        % Record while Universes still holds the points these rates belong to
+        for eval_count = (FE_before + 1):FE
+            if eval_count <= maxFE
+                curve(eval_count) = Best_universe_Inflation_rate;
+                [population_history, fitness_history, history_index] = record_history(...
+                    eval_count, Universes, Inflation_rates', population_history, fitness_history, ...
+                    history_index, maxFE);
             end
         end
 
@@ -149,16 +151,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        % Record convergence curve and history
-        for eval_count = (FE_before + 1):FE
-            if eval_count <= maxFE
-                curve(eval_count) = Best_universe_Inflation_rate;
-                [population_history, fitness_history, history_index] = record_history(...
-                    eval_count, Universes, Inflation_rates', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
-            end
-        end
-
         Time = Time + 1;
     end
 
@@ -167,7 +159,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -182,7 +174,7 @@ function X = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Roulette Wheel Selection ---
+% Roulette Wheel Selection
 function choice = RouletteWheelSelection(weights)
     accumulation = cumsum(weights);
     p = rand() * accumulation(end);

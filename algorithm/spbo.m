@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Student Psychology Based Optimization (SPBO) for unconstrained benchmark
-% problems
+% Student Psychology Based Optimization (SPBO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   student = 20          % Population size (number of students)
@@ -19,13 +18,7 @@
 % Advances in Engineering Software 146 (2020) 102804
 % https://doi.org/10.1016/j.advengsoft.2020.102804
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = spbo(problem)
@@ -42,11 +35,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, student, dim);
-    fitness_history = zeros(history_size, student);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialize the set of random solutions
@@ -66,7 +57,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = Best_fitness;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, sol, fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     while FE < maxFE
@@ -84,13 +75,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
             for dw = 1:student
                 if Best_fitness == fitness(dw, 1)
-                    % --- Best Student (Eq. 1) ---
+                    % Best Student (Eq. 1)
                     jg = fitness(randperm(numel(fitness), 1));
                     lk = find(fitness == jg, 1, 'last');
                     par1(dw, do) = par(dw, do) + (((-1)^(round(1 + rand))) * rand * (par(dw, do) - par(lk, do)));
                 else
                     if check(dw, 1) < mid(dw, 1)
-                        % --- Good Student (Eqs. 2a / 2b) ---
+                        % Good Student (Eqs. 2a / 2b)
                         rta = rand;
                         if rta > rand
                             par1(dw, do) = Best_student(1, do) + (rand * (Best_student(1, do) - par(dw, do)));
@@ -100,10 +91,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     else
                         an = rand;
                         if rand > an
-                            % --- Average Student (Eq. 3) ---
+                            % Average Student (Eq. 3)
                             par1(dw, do) = par(dw, do) + (rand * (meanv(1, do) - par(dw, do)));
                         else
-                            % --- Student who improves randomly (Eq. 4) ---
+                            % Student who improves randomly (Eq. 4)
                             par1(dw, do) = mini(do) + (rand * (maxi(do) - mini(do)));
                         end
                     end
@@ -142,7 +133,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(eval_count) = Best_fitness;
                     [population_history, fitness_history, history_index] = record_history(...
                         eval_count, sol, fitness, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
             end
 
@@ -157,7 +148,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(student, variable, maxi, mini)
     Boundary_no = size(maxi, 2);
     if Boundary_no == 1

@@ -1,12 +1,12 @@
 % ----------------------------------------------------------------------- %
-% Differential Evolution (DE) Algorithm for unconstrained benchmark problems
+% Differential Evolution (DE)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nPop = 50               % Population size
 %   beta_min = 0.2          % Lower Bound of Scaling Factor
 %   beta_max = 0.8          % Upper Bound of Scaling Factor
 %   pCR = 0.2               % Crossover Probability
-%   
+%
 % Algorithm Concept:
 %   - Population-based stochastic optimization algorithm
 %   - Uses mutation, crossover, and selection operations
@@ -16,43 +16,35 @@
 %
 % Reference:
 % Storn, R. and Price, K. (1997),
-% Differential evolution – a simple and efficient heuristic for global 
+% Differential evolution - a simple and efficient heuristic for global
 % optimization over continuous spaces,
 % Journal of Global Optimization, 11(4), 341-359.
 % https://doi.org/10.1023/A:1008202821328
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = de(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % DE Parameters
-    nPop = 50;                    % Population size
+    nPop = 50;
     beta_min = 0.2;               % Lower Bound of Scaling Factor
     beta_max = 0.8;               % Upper Bound of Scaling Factor
     pCR = 0.2;                    % Crossover Probability
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve - preallocate for maxFe elements
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, nPop, dim);  % Store population at sampled FEs
-    fitness_history = zeros(history_size, nPop);          % Store fitness values at sampled FEs
-    history_index = 1;                % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     % Initialize population
     X = initialization(nPop, dim, ub, lb);  % Population positions
@@ -70,7 +62,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         % Store history with sampling
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, X, fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Main loop
@@ -138,7 +130,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness_current;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, X, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -151,7 +143,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);  % Number of boundaries
     
@@ -170,7 +162,7 @@ function X = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

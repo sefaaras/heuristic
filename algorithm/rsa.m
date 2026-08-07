@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Reptile Search Algorithm (RSA) for unconstrained benchmark problems
+% Reptile Search Algorithm (RSA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N     = 10     % Population size
@@ -19,8 +19,7 @@
 % optimizer, Expert Systems with Applications 191 (2022) 116158.
 % https://doi.org/10.1016/j.eswa.2021.116158
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = rsa(problem)
@@ -39,10 +38,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, Dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     X = initialization(N, Dim, UB, LB);
@@ -57,7 +54,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = Best_F;
             [population_history, fitness_history, history_index] = record_history(...
                 e, X, Ffun, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -105,7 +102,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = Best_F;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, X, Ffun, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -117,7 +114,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Best_P;
 end
 
-%% --- Initialization ---
+% Initialization
 function X = initialization(N, Dim, UB, LB)
     B_no = size(UB, 2);
     if B_no == 1
@@ -130,7 +127,7 @@ function X = initialization(N, Dim, UB, LB)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

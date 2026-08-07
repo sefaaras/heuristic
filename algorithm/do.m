@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Dandelion Optimizer (DO) for unconstrained benchmark problems
+% Dandelion Optimizer (DO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   Popsize = 30   % Population size (dandelion seeds)
@@ -16,8 +16,7 @@
 % Engineering Applications of Artificial Intelligence 114 (2022) 105075.
 % https://doi.org/10.1016/j.engappai.2022.105075
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = do(problem)
@@ -33,10 +32,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, Popsize, dim);
-    fitness_history = zeros(history_size, Popsize);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     dandelions = initialization(Popsize, dim, UB, LB);
@@ -52,7 +49,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = Best_fitness;
             [population_history, fitness_history, history_index] = record_history(...
                 e, dandelions, dandelionsFitness, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -60,7 +57,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     while FE < maxFE
         t = t + 1;
 
-        %% Rising stage
+        % Rising stage
         beta = randn(Popsize, dim);
         alpha = rand() * ((1 / Maxiteration^2) * t^2 - 2 / Maxiteration * t + 1); % Eq.(8)
         a = -1 / (Maxiteration^2 - 2 * Maxiteration + 1);
@@ -87,7 +84,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         dandelions = max(dandelions, LB);
         dandelions = min(dandelions, UB);
 
-        %% Decline stage
+        % Decline stage
         dandelions_mean = sum(dandelions, 1) / Popsize; % Eq.(14)
         dandelions_2 = zeros(Popsize, dim);
         for i = 1:Popsize
@@ -99,7 +96,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         dandelions = max(dandelions, LB);
         dandelions = min(dandelions, UB);
 
-        %% Landing stage
+        % Landing stage
         Step_length = levy(Popsize, dim, 1.5);
         Elite = repmat(Best_position, Popsize, 1);
         dandelions_3 = zeros(Popsize, dim);
@@ -112,7 +109,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         dandelions = max(dandelions, LB);
         dandelions = min(dandelions, UB);
 
-        %% Evaluate
+        % Evaluate
         [dandelionsFitness, FE] = calculate_fitness(dandelions', problem, FE);
         dandelionsFitness = dandelionsFitness(:)';
 
@@ -131,7 +128,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = Best_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, dandelions, dandelionsFitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -143,7 +140,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Best_position;
 end
 
-%% --- Levy flight (n x m) ---
+% Levy flight (n x m)
 function z = levy(n, m, beta)
     num = gamma(1 + beta) * sin(pi * beta / 2);
     den = gamma((1 + beta) / 2) * beta * 2^((beta - 1) / 2);
@@ -153,7 +150,7 @@ function z = levy(n, m, beta)
     z = u ./ (abs(v).^(1 / beta));
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1

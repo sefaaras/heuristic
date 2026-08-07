@@ -1,9 +1,8 @@
 % ----------------------------------------------------------------------- %
 % Covariance Matrix Adaptation Evolution Strategy (CMA-ES)
-% for unconstrained benchmark problems
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
-%   lambda = (4 + round(3*log(nVar)))*10   % Offspring population size
+%   lambda = 4 + round(3*log(nVar))        % Offspring population size (Hansen's default)
 %   mu     = round(lambda/2)               % Number of parents
 %
 % Algorithm Concept:
@@ -17,18 +16,20 @@
 % Completely Derandomized Self-Adaptation in Evolution Strategies,
 % Evolutionary Computation 9 (2) (2001) 159-195.
 % https://doi.org/10.1162/106365601750190398
-%
-% Note: the original stores ps/pc/C/sigma/M for every generation in cell/struct
-% arrays of length MaxIt; this port keeps only the current generation's values
-% (identical computations) to avoid a MaxIt x nVar x nVar allocation.
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% Ported from a MATLAB release, not from Hansen's paper; it stored ps/pc/C/
+% sigma/M per generation, this port keeps only the current one (identical).
+% Six deliberate deviations from it: lambda is Hansen's default, not ten times
+% it; the CSA step drops its ^0.3 damping; ps uses M_Step/Rchol, not /chol(C)'
+% (R'R = C, so dividing by R' gives inv(R*R'), not inv(C)); the step is
+% re-derived from the CLAMPED position, since the mean and rank-mu term build on
+% it and pre-clamp steps collapse C to rank 1; enforce_pd floors eigenvalues at
+% emax*1e-14 every generation, where the release clamped only negatives to 0 and
+% left C singular so chol threw on real CEC2014 runs; and MaxIt = maxFE makes
+% the FE guard the sole terminator, the release's estimate spending 50-88 %.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = cmaes(problem)
@@ -41,10 +42,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     VarSize = [1 nVar];
 
-    %% CMA-ES settings
+    % CMA-ES settings
     MaxIt = maxFE;
 
-    lambda = (4 + round(3 * log(nVar))) * 10;   % population size (offspring)
+    lambda = 4 + round(3 * log(nVar));           % population size (offspring)
     mu = round(lambda / 2);                      % number of parents
 
     w = log(mu + 0.5) - log(1:mu);               % parent weights
@@ -64,14 +65,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_pop_size = 100;
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, history_pop_size, nVar);
-    fitness_history = zeros(history_size, history_pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    %% Initialization (current-generation state)
+    % Initialization (current-generation state)
     ps = zeros(VarSize);
     pc = zeros(VarSize);
     C = eye(nVar);
@@ -92,7 +90,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(FE) = BestSol_Cost;
     end
 
-    %% CMA-ES main loop
+    % CMA-ES main loop
     for g = 1:MaxIt
         if FE >= maxFE, break; end
         FE_before = FE;
@@ -104,6 +102,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             pop(i).Position = M_Position + sigma .* pop(i).Step;
             pop(i).Position = max(pop(i).Position, VarMin);
             pop(i).Position = min(pop(i).Position, VarMax);
+            % Step re-derived from the CLAMPED position: pre-clamp steps collapse C to rank 1 at large sigma
+            pop(i).Step = (pop(i).Position - M_Position) ./ sigma;
             [pop(i).Cost, FE] = calculate_fitness(pop(i).Position', problem, FE);
             if pop(i).Cost < BestSol_Cost
                 BestSol_Cost = pop(i).Cost;
@@ -122,8 +122,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
         % Record history for this generation's FE block (top-100)
         [population_history, fitness_history, history_index] = record_cmaes(...
-            pop, history_pop_size, nVar, FE_before + 1, min(FE, maxFE), ...
-            population_history, fitness_history, history_index, sampling_interval, history_size);
+            pop, nVar, FE_before + 1, min(FE, maxFE), ...
+            population_history, fitness_history, history_index, maxFE);
 
         if g == MaxIt || FE >= maxFE
             break;
@@ -148,8 +148,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
         % Update step size (robust factor: never errors on a near-singular C)
         Rchol = safe_chol(C);
-        ps = (1 - cs) * ps + sqrt(cs * (2 - cs) * mu_eff) * (M_Step / Rchol');
-        sigma = sigma * exp(cs / ds * (norm(ps) / ENN - 1))^0.3;
+        % chol gives R'R = C, so the ROW vector's conjugate step is M_Step/R, not M_Step/R'
+        ps = (1 - cs) * ps + sqrt(cs * (2 - cs) * mu_eff) * (M_Step / Rchol);
+        % Canonical CSA update - no extra damping exponent.
+        sigma = sigma * exp(cs / ds * (norm(ps) / ENN - 1));
 
         % Update covariance matrix
         if norm(ps) / sqrt(1 - (1 - cs)^(2 * (g + 1))) < hth
@@ -164,8 +166,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             C = C + cmu * w(j) * pop(j).Step' * pop(j).Step;
         end
 
-        % Enforce symmetry and strict positive definiteness so the next
-        % generation's chol(C) / mvnrnd(.,C) cannot fail on a degenerate C.
+        % Symmetry and strict positive definiteness enforced so the next chol/mvnrnd cannot fail
         C = enforce_pd(C, nVar);
 
         M_Position = M_Position_new;
@@ -178,7 +179,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = BestSol_Cost;
 end
 
-%% --- Robust Cholesky factor: diagonal-jitter fallback if C is not PD ---
+% Robust Cholesky factor: diagonal-jitter fallback if C is not PD
 function R = safe_chol(C)
     [R, p] = chol(C);
     if p == 0, return; end
@@ -194,7 +195,7 @@ function R = safe_chol(C)
     R = eye(n);   % last resort: whitening reduces to identity
 end
 
-%% --- Force C symmetric and strictly positive definite (capped condition) ---
+% Force C symmetric and strictly positive definite (capped condition)
 function C = enforce_pd(C, nVar)
     C = (C + C') / 2;                    % strip roundoff asymmetry
     [V, E] = eig(C);
@@ -209,19 +210,19 @@ function C = enforce_pd(C, nVar)
     C = (C + C') / 2;
 end
 
-%% --- Record top-k of the sorted CMA-ES population over an FE block ---
-function [pop_hist, fit_hist, hist_idx] = record_cmaes(pop, history_pop_size, dim, fe_from, fe_to, pop_hist, fit_hist, hist_idx, sampling_interval, history_size)
+% Record the metrics of the CMA-ES population over an FE block
+function [pop_hist, fit_hist, hist_idx] = record_cmaes(pop, dim, fe_from, fe_to, pop_hist, fit_hist, hist_idx, maxFE)
     if fe_to < fe_from, return; end
-    top_k = min(history_pop_size, numel(pop));
-    rec_pop = NaN(history_pop_size, dim);
-    rec_fit = NaN(1, history_pop_size);
-    for i = 1:top_k
+    n = numel(pop);
+    rec_pop = zeros(n, dim);
+    rec_fit = zeros(1, n);
+    for i = 1:n
         rec_pop(i, :) = pop(i).Position;
         rec_fit(i) = pop(i).Cost;
     end
     for eval_count = fe_from:fe_to
         [pop_hist, fit_hist, hist_idx] = record_history(...
             eval_count, rec_pop, rec_fit, pop_hist, fit_hist, hist_idx, ...
-            sampling_interval, history_size);
+            maxFE);
     end
 end

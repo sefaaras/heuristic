@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% African Vultures Optimization Algorithm (AVOA) for unconstrained
-% benchmark problems
+% African Vultures Optimization Algorithm (AVOA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 30         % Population size (number of vultures)
@@ -20,13 +19,7 @@
 % Computers & Industrial Engineering 158 (2021) 107408
 % https://doi.org/10.1016/j.cie.2021.107408
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = avoa(problem)
@@ -42,11 +35,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, pop_size, variables_no);
-    fitness_history = zeros(history_size, pop_size);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     max_iter = (maxFE / pop_size) + 1;
@@ -93,7 +84,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = Best_vulture1_F;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, X, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -129,7 +120,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Exploitation phase ---
+% Exploitation phase
 function [current_vulture_X] = exploitation(current_vulture_X, Best_vulture1_X, Best_vulture2_X, ...
         random_vulture_X, F, p2, p3, variables_no, ~, ~)
     % phase 1
@@ -154,7 +145,7 @@ function [current_vulture_X] = exploitation(current_vulture_X, Best_vulture1_X, 
     end
 end
 
-%% --- Exploration phase ---
+% Exploration phase
 function [current_vulture_X] = exploration(current_vulture_X, random_vulture_X, F, p1, upper_bound, lower_bound)
     if rand < p1
         current_vulture_X = random_vulture_X - (abs(2 * rand) * random_vulture_X - current_vulture_X) * F;
@@ -163,7 +154,7 @@ function [current_vulture_X] = exploration(current_vulture_X, random_vulture_X, 
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function [X] = boundaryCheck(X, lb, ub)
     for i = 1:size(X, 1)
         FU = X(i, :) > ub;
@@ -172,7 +163,7 @@ function [X] = boundaryCheck(X, lb, ub)
     end
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function [X] = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -187,7 +178,7 @@ function [X] = initialization(N, dim, ub, lb)
     end
 end
 
-%% --- Levy Flight ---
+% Levy Flight
 function [o] = levyFlight(d)
     beta = 3 / 2;
     sigma = (gamma(1 + beta) * sin(pi * beta / 2) / (gamma((1 + beta) / 2) * beta * 2^((beta - 1) / 2)))^(1 / beta);
@@ -197,7 +188,7 @@ function [o] = levyFlight(d)
     o = step;
 end
 
-%% --- Random selection of one of the two best vultures ---
+% Random selection of one of the two best vultures
 function [random_vulture_X] = random_select(Best_vulture1_X, Best_vulture2_X, alpha, betha)
     probabilities = [alpha, betha];
     if (rouletteWheelSelection(probabilities) == 1)
@@ -207,7 +198,7 @@ function [random_vulture_X] = random_select(Best_vulture1_X, Best_vulture2_X, al
     end
 end
 
-%% --- Roulette Wheel Selection (standard AVOA helper) ---
+% Roulette Wheel Selection (standard AVOA helper)
 function [index] = rouletteWheelSelection(x)
     index = find(rand() <= cumsum(x), 1, 'first');
     if isempty(index)   % guard against floating-point rounding leaving no hit

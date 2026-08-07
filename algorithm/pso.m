@@ -1,12 +1,12 @@
 % ----------------------------------------------------------------------- %
-% Particle Swarm Optimization (PSO) Algorithm for unconstrained benchmark problems
+% Particle Swarm Optimization (PSO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 30                  % Population size (number of particles)
 %   w = 0.9 -> 0.4          % Inertia weight (linearly decreasing)
 %   c1 = 2                  % Cognitive parameter (personal best)
 %   c2 = 2                  % Social parameter (global best)
-%   
+%
 % Algorithm Concept:
 %   - Inspired by social behavior of bird flocking or fish schooling
 %   - Each particle has position and velocity
@@ -20,34 +20,26 @@
 % Perth, WA, Australia, 1995, pp. 1942-1948 vol.4
 % https://doi.org/10.1109/ICNN.1995.488968
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = pso(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     N = 30;                       % Population size (number of particles)
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve - preallocate for maxFe elements
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, N, dim);  % Store population at sampled FEs
-    fitness_history = zeros(history_size, N);          % Store fitness values at sampled FEs
-    history_index = 1;                % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     % PSO parameters
     w_max = 0.9;                  % Maximum inertia weight
@@ -80,7 +72,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         % Store history with sampling
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, X, fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Main loop
@@ -138,7 +130,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = gbest_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, X, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -151,7 +143,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);  % Number of boundaries
     
@@ -170,7 +162,7 @@ function X = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

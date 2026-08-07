@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Dynamic Differential Annealed Optimization (DDAO) for unconstrained benchmark problems
+% Dynamic Differential Annealed Optimization (DDAO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   Npop     = 3       % Population size
@@ -20,13 +20,16 @@
 % Applied Soft Computing 93 (2020) 106392
 % https://doi.org/10.1016/j.asoc.2020.106392
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% The reference's Metropolis loop walks the whole population and writes the SAME
+% candidate into every member it beats, so with Npop = 3 the population collapses
+% to three identical points within a few iterations and stays there: 39 of 40
+% history rows have div_dap, div_mpd and diameter at exactly 0. That is the
+% algorithm as published, kept as written, but it means DDAO's diversity columns
+% are structurally zero and must not be read as a convergence signal the way
+% they would be for a genuine population method.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = ddao(problem)
@@ -47,10 +50,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     curve = zeros(1, maxFE);
 
     % History storage
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, Npop, dim);
-    fitness_history = zeros(history_size, Npop);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialize population
@@ -66,7 +67,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = BestCost;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, popPhase, popCost', population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     T = T0;
@@ -128,7 +129,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = BestCost;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, popPhase, popCost', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end

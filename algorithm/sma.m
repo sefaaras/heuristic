@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Slime Mould Algorithm (SMA) for unconstrained benchmark problems
+% Slime Mould Algorithm (SMA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 30                % Population size (number of slime moulds)
@@ -17,13 +17,15 @@
 % Future Generation Computer Systems 111 (2020) 300-323
 % https://doi.org/10.1016/j.future.2020.03.055
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% Eq.(2.5) divides by (best - worst), and the reference's "+ eps" only covers a
+% zero span, not a non-finite one. CEC2020RW RC25 really returns Inf near its
+% interior pole, and a single Inf smell makes the span -Inf, every ratio Inf/Inf
+% and the whole population NaN within one generation. The span is therefore
+% taken over the finite smells and a non-finite smell is given the worst ratio,
+% which is the value it would have had if the objective had merely been large.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = sma(problem)
@@ -39,11 +41,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Max_iter = ceil(maxFE / N);
@@ -76,15 +76,25 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         worstFitness = SmellOrder(N);
         bestFitness = SmellOrder(1);
 
+        % The span is taken over the finite smells; a non-finite worst makes every ratio NaN
+        finiteSmell = SmellOrder(isfinite(SmellOrder));
+        if ~isempty(finiteSmell)
+            worstFitness = finiteSmell(end);
+        else
+            worstFitness = bestFitness;
+        end
         S = bestFitness - worstFitness + eps;  % plus eps to avoid denominator zero
+
+        ratio = (bestFitness - SmellOrder) / S;
+        ratio(~isfinite(SmellOrder)) = 1;  % a non-finite smell is the worst one, not a NaN
 
         % calculate the fitness weight of each slime mould
         for i = 1:N
             for j = 1:dim
                 if i <= (N / 2)  % Eq.(2.5)
-                    weight(SmellIndex(i), j) = 1 + rand() * log10((bestFitness - SmellOrder(i)) / (S) + 1);
+                    weight(SmellIndex(i), j) = 1 + rand() * log10(ratio(i) + 1);
                 else
-                    weight(SmellIndex(i), j) = 1 - rand() * log10((bestFitness - SmellOrder(i)) / (S) + 1);
+                    weight(SmellIndex(i), j) = 1 - rand() * log10(ratio(i) + 1);
                 end
             end
         end
@@ -101,7 +111,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = Destination_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, X, AllFitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -139,7 +149,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function Positions = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1

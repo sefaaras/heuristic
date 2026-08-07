@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Artificial Bee Colony (ABC) Algorithm
+% Artificial Bee Colony (ABC)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NP = 50                     % Colony size (employed + onlooker bees)
@@ -17,23 +17,24 @@
 % A powerful and efficient algorithm for numerical function optimization: artificial bee colony (ABC) algorithm,
 % Journal of Global Optimization 39 (2007) 459-471
 % https://doi.org/10.1007/s10898-007-9149-x
+%
+% Implementation Note:
+%   curve and best_fitness track the best point the run has evaluated. The
+%   reference refreshes its global best once per cycle, after the onlooker
+%   phase, which leaves a source found mid-cycle unreported and drops whatever
+%   the final, partial cycle finds; that per-cycle update fed nothing but the
+%   report, so it is replaced rather than kept alongside.
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = abc(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % Algorithm parameters
     NP = 50;                              % Colony size
@@ -41,13 +42,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     limit = FoodNumber * dim;             % Abandonment limit
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
     % Initialize storage for population and fitness history
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, FoodNumber, dim);
-    fitness_history = zeros(history_size, FoodNumber);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Initialize food sources
@@ -63,19 +62,23 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     % Find the best food source
     [GlobalMin, BestInd] = min(ObjVal);
     GlobalParams = Foods(BestInd, :);
-    
+
+    % Best point evaluated so far; GlobalMin only refreshes once per cycle
+    bsf_fit = GlobalMin;
+    bsf_x = GlobalParams;
+
     % Record initial population
     for eval_count = 1:FoodNumber
-        curve(eval_count) = GlobalMin;
+        curve(eval_count) = bsf_fit;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, Foods, ObjVal, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Main loop
     while FE < maxFE
         
-        %%%%%%%%% EMPLOYED BEE PHASE %%%%%%%%%%%%%%%%%%%%%%%%
+        % Employed bee phase
         for i = 1:FoodNumber
             if FE >= maxFE
                 break;
@@ -96,6 +99,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             % Evaluate new solution
             [ObjValSol, FE] = calculate_fitness(sol', problem, FE);
             FitnessSol = calculateFitness_ABC(ObjValSol);
+            if ObjValSol < bsf_fit
+                bsf_fit = ObjValSol;
+                bsf_x = sol;
+            end
             
             % Greedy selection
             if FitnessSol > Fitness(i)
@@ -109,18 +116,17 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             
             % Record convergence curve and history
             if FE <= maxFE
-                curve(FE) = GlobalMin;
+                curve(FE) = bsf_fit;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, Foods, ObjVal, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
-        %%%%%%%%%%%%%%%%%%%%%%%% CalculateProbabilities %%%%%%%%%%%%%%%%%%%%%%%%
-        % Calculate probability values for onlooker bees
+        % Onlooker selection probabilities
         prob = (0.9 .* Fitness ./ max(Fitness)) + 0.1;
         
-        %%%%%%%%%%%%%%%%%%%%%%%% ONLOOKER BEE PHASE %%%%%%%%%%%%%%%%%%%%%%%%%%%%
+        % Onlooker bee phase
         i = 1;
         t = 0;
         while t < FoodNumber && FE < maxFE
@@ -142,6 +148,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 % Evaluate new solution
                 [ObjValSol, FE] = calculate_fitness(sol', problem, FE);
                 FitnessSol = calculateFitness_ABC(ObjValSol);
+                if ObjValSol < bsf_fit
+                    bsf_fit = ObjValSol;
+                    bsf_x = sol;
+                end
                 
                 % Greedy selection
                 if FitnessSol > Fitness(i)
@@ -155,10 +165,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 
                 % Record convergence curve and history
                 if FE <= maxFE
-                    curve(FE) = GlobalMin;
+                    curve(FE) = bsf_fit;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, Foods, ObjVal, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
             end
             
@@ -168,15 +178,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
         
-        % Update the best food source
-        [minVal, minInd] = min(ObjVal);
-        if minVal < GlobalMin
-            GlobalMin = minVal;
-            GlobalParams = Foods(minInd, :);
-        end
-        
-        %%%%%%%%%%%% SCOUT BEE PHASE %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-        % Determine the food source with maximum trial counter
+        % Scout bee phase: the food source with the highest trial counter
         [maxTrial, maxInd] = max(trial);
         
         if maxTrial > limit && FE < maxFE
@@ -187,6 +189,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             % Evaluate new solution
             [ObjValSol, FE] = calculate_fitness(sol', problem, FE);
             FitnessSol = calculateFitness_ABC(ObjValSol);
+            if ObjValSol < bsf_fit
+                bsf_fit = ObjValSol;
+                bsf_x = sol;
+            end
             
             Foods(maxInd, :) = sol;
             Fitness(maxInd) = FitnessSol;
@@ -194,25 +200,25 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             
             % Record convergence curve and history
             if FE <= maxFE
-                curve(FE) = GlobalMin;
+                curve(FE) = bsf_fit;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, Foods, ObjVal, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
     end
     
     % Fill remaining curve values with best fitness
-    curve(FE:end) = GlobalMin;
+    curve(FE:end) = bsf_fit;
     
     % Return best solution
-    best_fitness = GlobalMin;
-    best_solution = GlobalParams;
+    best_fitness = bsf_fit;
+    best_solution = bsf_x;
     
 end
 
-%% --- Helper Functions ---
+% Helper Functions
 
 function Positions = initialization(popsize, dim, ub, lb)
     Boundary_no = size(ub, 2);
@@ -234,8 +240,7 @@ function a = bound(a, ub, lb)
 end
 
 function fFitness = calculateFitness_ABC(fObjV)
-    % ABC-specific fitness calculation
-    % Converts objective values to fitness values for probability calculation
+    % Objective values mapped to the positive fitness the probabilities need
     fFitness = zeros(size(fObjV));
     ind = find(fObjV >= 0);
     fFitness(ind) = 1 ./ (fObjV(ind) + 1);

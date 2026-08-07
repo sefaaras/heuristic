@@ -1,11 +1,11 @@
 % ----------------------------------------------------------------------- %
-% Adaptive Guided Differential Evolution (AGDE) for unconstrained benchmark problems
+% Adaptive Guided Differential Evolution (AGDE)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NP = 50                 % Population size
 %   F = 0.1 + 0.9*rand      % Adaptive scaling factor
 %   CR = Adaptive           % Crossover rate (two pools: 0.05-0.15 or 0.9-1.0)
-%   
+%
 % Algorithm Concept:
 %   - Variant of Differential Evolution with adaptive crossover rate
 %   - Uses two CR pools: low (0.05-0.15) and high (0.9-1.0)
@@ -15,39 +15,31 @@
 %
 % Reference:
 % Mohamed, A.W., Hadi, A.A. and Jambi, K.M. (2019),
-% Novel mutation strategy for enhancing SHADE and LSHADE algorithms 
+% Novel mutation strategy for enhancing SHADE and LSHADE algorithms
 % for global numerical optimization,
 % Swarm and Evolutionary Computation, 50, 100455.
 % https://doi.org/10.1016/j.swevo.2018.10.006
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = agde(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % AGDE Parameters
     NP = 50;                      % Population size
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, NP, dim);
-    fitness_history = zeros(history_size, NP);
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Initialize population
@@ -65,7 +57,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = best_fitness_current;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, Pop, Fit, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Adaptive CR parameters
@@ -153,7 +145,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = best_fitness_current;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, Pop, Fit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -177,7 +169,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -190,7 +182,7 @@ function X = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     % Random reinitialization for out-of-bound values
     for i = 1:length(a)

@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Barnacles Mating Optimizer (BMO) for unconstrained benchmark problems
+% Barnacles Mating Optimizer (BMO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N  = 30   % Population size (number of barnacles)
@@ -17,13 +17,7 @@
 % Engineering Applications of Artificial Intelligence 87 (2020) 103330
 % https://doi.org/10.1016/j.engappai.2019.103330
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = bmo(problem)
@@ -37,8 +31,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     N  = 30;   % Population size
     pl = 7;    % Penis length
 
-    % This algorithm operates on an even number of variables. For an odd
-    % dimension a dummy variable is appended and ignored during evaluation.
+    % Needs an even dimension: an odd one gets a dummy variable, ignored during evaluation
     flag = 0;
     eval_dim = dim;
     if rem(dim, 2) ~= 0
@@ -52,10 +45,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     curve = zeros(1, maxFE);
 
     % History storage
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialize the population of barnacles
@@ -74,8 +65,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     for eval_count = 1:N
         curve(eval_count) = TargetFitness;
         [population_history, fitness_history, history_index] = record_history(...
-            eval_count, BarnaclesPositions, BarnaclesFitness', population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            eval_count, BarnaclesPositions(:, 1:eval_dim), BarnaclesFitness', population_history, fitness_history, ...
+            history_index, maxFE);
     end
 
     % Main loop
@@ -132,8 +123,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if eval_count >= 1 && eval_count <= maxFE
                 curve(eval_count) = TargetFitness;
                 [population_history, fitness_history, history_index] = record_history(...
-                    eval_count, BarnaclesPositions, BarnaclesFitness', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    eval_count, BarnaclesPositions(:, 1:eval_dim), BarnaclesFitness', population_history, fitness_history, ...
+                    history_index, maxFE);
             end
         end
     end
@@ -145,7 +136,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = TargetPosition;
 end
 
-%% --- Evaluate a population (row-wise), honouring the dummy-variable flag ---
+% Evaluate a population (row-wise), honouring the dummy-variable flag
 function [fit, FE] = evaluate_pop(P, flag, problem, FE)
     if flag == 1
         [fit, FE] = calculate_fitness(P(:, 1:end-1)', problem, FE);
@@ -155,7 +146,7 @@ function [fit, FE] = evaluate_pop(P, flag, problem, FE)
     fit = fit(:)';
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function Positions = initialization(SearchAgents_no, dim, ub, lb)
     Positions = zeros(SearchAgents_no, dim);
     for i = 1:dim

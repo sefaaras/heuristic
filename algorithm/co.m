@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Cheetah Optimizer (CO) for unconstrained benchmark problems
+% Cheetah Optimizer (CO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   n = 6   % Population size (cheetahs)
@@ -19,8 +19,7 @@
 % Scientific Reports 12 (2022) 10953.
 % https://doi.org/10.1038/s41598-022-14338-z
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = co(problem)
@@ -36,10 +35,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, n, D);
-    fitness_history = zeros(history_size, n);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initial population
@@ -64,7 +61,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 e, popPos, popCost, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -155,14 +152,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, popPos, popCost, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
 
         t = t + 1;
 
-        %% Leave the prey and go back home
+        % Leave the prey and go back home
         if FE < maxFE && t > T && t - round(T) - 1 >= 1 && t > 2
             if abs(BestCost(t - 1) - BestCost(t - round(T) - 1)) <= abs(0.01 * BestCost(t - 1))
                 best = X_bestPos;
@@ -179,7 +176,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = bsf;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, popPos, popCost, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 i0 = randi(n, 1, round(1 * n));
                 popPos(i0(n - m + 1:n), :) = pop1Pos(i0(1:m), :);
@@ -191,7 +188,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
         it = it + 1;
 
-        %% Update the prey (global best)
+        % Update the prey (global best)
         if BestSolCost < X_bestCost
             X_bestPos = BestSolPos;
             X_bestCost = BestSolCost;

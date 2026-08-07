@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Starling Murmuration Optimizer (SMO) for benchmark problems
+% Starling Murmuration Optimizer (SMO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   PopSize  = 100   % Population size (starlings)
@@ -17,8 +17,7 @@
 % Computer Methods in Applied Mechanics and Engineering 392 (2022) 114616.
 % https://doi.org/10.1016/j.cma.2022.114616
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = smo(problem)
@@ -35,10 +34,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, PopSize, ProblemSize);
-    fitness_history = zeros(history_size, PopSize);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Pop = repmat(lu(1, :), PopSize, 1) + rand(PopSize, ProblemSize) .* (repmat(lu(2, :) - lu(1, :), PopSize, 1));
@@ -60,7 +57,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 e, Pop, Val, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -69,12 +66,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     while FE < maxFE
         t = t + 1;
 
-        %% A) Separating strategy
+        % A) Separating strategy
         Sep_rate = log(t + ProblemSize) / (log(MaxIt) * 2);
         SepSize = max(round(Sep_rate * size(Pop, 1)), 2);
-        % Keep at least FlockNum starlings outside the separated set so the
-        % dynamic multi-flock construction always has enough representatives
-        % (only binds for a tiny budget relative to dimension).
+        % At least FlockNum starlings stay outside the separated set (binds only on a tiny budget)
         SepSize = min(SepSize, PopSize - FlockNum);
         SepInd = (randperm(size(Pop, 1), SepSize))';
         PopSep = Pop(SepInd, :);
@@ -92,11 +87,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         ValSep = ValSep(:)';
         [bsf, best_pos, curve, population_history, fitness_history, history_index] = recordBatch(...
             ValSep, PopSep, bsf, best_pos, curve, FE, maxFE, Pop, Val, ...
-            population_history, fitness_history, history_index, sampling_interval, history_size);
+            population_history, fitness_history, history_index);
         [Pop(SepInd, :), Val(SepInd)] = Update(PopSep, ValSep, Pop(SepInd, :), Val(SepInd), ProblemSize);
         if FE >= maxFE, break; end
 
-        %% B) Dynamic multi-flock construction
+        % B) Dynamic multi-flock construction
         Ind = (setdiff(1:PopSize, SepInd))';
         [EVal, sorted_index] = sort(Val(Ind), 'ascend');
         EPop = Pop(sorted_index, :);
@@ -122,7 +117,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         F_Quality = (sum(F_Mean)) ./ repmat(F_Mean, FlockNum, 1);
         F_Quality = F_Quality(1, :);
 
-        %% C) Whirling search strategy (exploitation)
+        % C) Whirling search strategy (exploitation)
         [~, FW] = find(F_Quality > mean(F_Quality));
         for i = 1:size(FW, 2)
             WhirIdx = Result{FW(i)};
@@ -137,13 +132,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             WhirlingVal = WhirlingVal(:)';
             [bsf, best_pos, curve, population_history, fitness_history, history_index] = recordBatch(...
                 WhirlingVal, WhirlingPop, bsf, best_pos, curve, FE, maxFE, Pop, Val, ...
-                population_history, fitness_history, history_index, sampling_interval, history_size);
+                population_history, fitness_history, history_index);
             [Pop(Ind(WhirIdx), :), Val(Ind(WhirIdx))] = Update(Pop(Ind(WhirIdx), :), Val(Ind(WhirIdx)), WhirlingPop, WhirlingVal, ProblemSize);
             if FE >= maxFE, break; end
         end
         if FE >= maxFE, break; end
 
-        %% D) Diving search strategy (exploration)
+        % D) Diving search strategy (exploration)
         [~, FD] = find(F_Quality <= mean(F_Quality));
         for q = 1:size(FD, 2)
             DivIdx = Result{FD(q)};
@@ -186,7 +181,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             DivingVal = DivingVal(:)';
             [bsf, best_pos, curve, population_history, fitness_history, history_index] = recordBatch(...
                 DivingVal, DivingPop, bsf, best_pos, curve, FE, maxFE, Pop, Val, ...
-                population_history, fitness_history, history_index, sampling_interval, history_size);
+                population_history, fitness_history, history_index);
             [Pop(Ind(DivIdx), :), Val(Ind(DivIdx))] = Update(Pop(Ind(DivIdx), :), Val(Ind(DivIdx)), DivingPop, DivingVal, ProblemSize);
             if FE >= maxFE, break; end
         end
@@ -206,8 +201,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = best_pos;
 end
 
-%% --- Update best-so-far and convergence curve for an evaluated batch ---
-function [bsf, best_pos, curve, ph, fh, hi] = recordBatch(bval, bpos, bsf, best_pos, curve, FE, maxFE, Pop, Val, ph, fh, hi, si, hs)
+% Update best-so-far and convergence curve for an evaluated batch
+function [bsf, best_pos, curve, ph, fh, hi] = recordBatch(bval, bpos, bsf, best_pos, curve, FE, maxFE, Pop, Val, ph, fh, hi)
     nb = numel(bval);
     for kk = 1:nb
         if bval(kk) < bsf
@@ -217,12 +212,12 @@ function [bsf, best_pos, curve, ph, fh, hi] = recordBatch(bval, bpos, bsf, best_
         ec = FE - nb + kk;
         if ec >= 1 && ec <= maxFE
             curve(ec) = bsf;
-            [ph, fh, hi] = record_history(ec, Pop, Val, ph, fh, hi, si, hs);
+            [ph, fh, hi] = record_history(ec, Pop, Val, ph, fh, hi, maxFE);
         end
     end
 end
 
-%% --- Bound correction (reflect toward midpoint with the parent) ---
+% Bound correction (reflect toward midpoint with the parent)
 function Xi = BoundCorrection(Xi, Pop, lu)
     Lower = repmat(lu(1, :), size(Pop, 1), 1);
     Xi(Xi < Lower) = (Pop(Xi < Lower) + Lower(Xi < Lower)) / 2;
@@ -230,7 +225,7 @@ function Xi = BoundCorrection(Xi, Pop, lu)
     Xi(Xi > Upper) = (Pop(Xi > Upper) + Upper(Xi > Upper)) / 2;
 end
 
-%% --- Greedy update (keep the better of two candidate sets) ---
+% Greedy update (keep the better of two candidate sets)
 function [OutPop, OutVal] = Update(Pop, Val, TPop, TVal, D)
     tmp = (Val <= TVal);
     tmp1 = repmat(tmp', 1, D);
@@ -238,7 +233,7 @@ function [OutPop, OutVal] = Update(Pop, Val, TPop, TVal, D)
     OutVal = tmp .* Val + (1 - tmp) .* TVal;
 end
 
-%% --- Quantum harmonic oscillator operator ---
+% Quantum harmonic oscillator operator
 function Out = QHO(y)
     n = 1;
     h_bar = 1.05457168e-34; m = 9.1093826e-31; k = 2 * pi * 1e6;

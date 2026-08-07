@@ -1,12 +1,12 @@
 % ----------------------------------------------------------------------- %
-% Henry Gas Solubility Optimization (HGSO) Algorithm
+% Henry Gas Solubility Optimization (HGSO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nP = 50                      % Population size (number of gases)
 %   nTypes = 5                   % Number of gas types (clusters)
-%   l1, l2, l3                   % Constants in Eq.(7)
-%   alpha, beta                  % Constants in Eq.(10)
-%   M1, M2                       % Constants in Eq.(11) for worst agents
+%   l1 = 5e-3, l2 = 100, l3 = 1e-2   % Constants in Eq.(7)
+%   alpha = 1, beta = 1              % Constants in Eq.(10)
+%   M1 = 0.1, M2 = 0.2               % Constants in Eq.(11) for worst agents
 %
 % Algorithm Concept:
 %   - Based on Henry's law of gas solubility
@@ -21,22 +21,16 @@
 % DOI: https://doi.org/10.1016/j.future.2019.07.015
 % https://www.sciencedirect.com/science/article/pii/S0167739X19306557
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = hgso(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % Algorithm parameters
     nP = 50;                      % Population size (number of gases)
@@ -59,13 +53,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     MaxIt = floor(maxFE / nP);    % Maximum iterations
     
     FE = 0;                       % Function Evaluation Counter
-    curve = zeros(1, maxFE);      % Convergence curve
+    curve = zeros(1, maxFE);
     
     % Initialize storage for population and fitness history
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nP, dim);
-    fitness_history = zeros(history_size, nP);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Parameters setting in Eq.(7)
@@ -107,15 +99,16 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = Gbest;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, X, Cost, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
     
-    %% Main Loop
+    % Main Loop
     it = 0;
     while FE < maxFE
         it = it + 1;
-        
+        fe_block_start = FE;        % curve is filled over the whole block this iteration evaluates
+
         % Update variables (temperature and solubility)
         T = exp(-it / MaxIt);
         T0 = 298.15;
@@ -196,11 +189,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         end
         
         % Record convergence curve and history
+        fe_now = min(FE, maxFE);
+        if fe_now > fe_block_start
+            curve(fe_block_start + 1:fe_now) = Gbest;
+        end
         if FE <= maxFE
-            curve(FE) = Gbest;
             [population_history, fitness_history, history_index] = record_history(...
                 FE, X_full, Cost_full, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
     
@@ -213,7 +209,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Helper Functions ---
+% Helper Functions
 
 % Initialize population
 function Positions = initialization(popsize, dim, ub, lb)

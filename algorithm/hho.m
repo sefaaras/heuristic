@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Harris Hawks Optimization (HHO) Algorithm for unconstrained benchmark problems
+% Harris Hawks Optimization (HHO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 30                    % Population size (number of hawks)
@@ -17,13 +17,7 @@
 % Future Generation Computer Systems 97 (2019) 849-872
 % https://doi.org/10.1016/j.future.2019.02.028
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = hho(problem)
@@ -38,10 +32,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     X = initialization(N, dim, ub, lb);
@@ -54,7 +46,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = Rabbit_Energy;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, X, Fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     while FE < maxFE
@@ -87,7 +79,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = Rabbit_Energy;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, X, Fitness, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
 
             else
@@ -111,7 +103,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                         curve(FE) = Rabbit_Energy;
                         [population_history, fitness_history, history_index] = record_history(...
                             FE, X, Fitness, population_history, fitness_history, ...
-                            history_index, sampling_interval, history_size);
+                            history_index, maxFE);
                     end
 
                 else
@@ -129,7 +121,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                             curve(FE) = Rabbit_Energy;
                             [population_history, fitness_history, history_index] = record_history(...
                                 FE, X, Fitness, population_history, fitness_history, ...
-                                history_index, sampling_interval, history_size);
+                                history_index, maxFE);
                         end
 
                         if FitX1 < Fitness(i)
@@ -149,7 +141,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                                 curve(FE) = Rabbit_Energy;
                                 [population_history, fitness_history, history_index] = record_history(...
                                     FE, X, Fitness, population_history, fitness_history, ...
-                                    history_index, sampling_interval, history_size);
+                                    history_index, maxFE);
                             end
 
                             if FitX2 < Fitness(i)
@@ -172,7 +164,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                             curve(FE) = Rabbit_Energy;
                             [population_history, fitness_history, history_index] = record_history(...
                                 FE, X, Fitness, population_history, fitness_history, ...
-                                history_index, sampling_interval, history_size);
+                                history_index, maxFE);
                         end
 
                         if FitX1 < Fitness(i)
@@ -192,7 +184,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                                 curve(FE) = Rabbit_Energy;
                                 [population_history, fitness_history, history_index] = record_history(...
                                     FE, X, Fitness, population_history, fitness_history, ...
-                                    history_index, sampling_interval, history_size);
+                                    history_index, maxFE);
                             end
 
                             if FitX2 < Fitness(i)
@@ -217,7 +209,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Levy Flight ---
+% Levy Flight
 function o = Levy(d)
     beta = 1.5;
     sigma = (gamma(1 + beta) * sin(pi * beta / 2) / (gamma((1 + beta) / 2) * beta * 2^((beta - 1) / 2)))^(1 / beta);
@@ -227,7 +219,7 @@ function o = Levy(d)
     o = step;
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -242,7 +234,7 @@ function X = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

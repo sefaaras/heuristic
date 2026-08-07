@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% RIME Optimization Algorithm (RIME) for unconstrained benchmark problems
+% RIME Optimization Algorithm (RIME)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 30   % Population size (rime-agents)
@@ -17,8 +17,7 @@
 % Neurocomputing 532 (2023) 183-214.
 % https://doi.org/10.1016/j.neucom.2023.02.010
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = rime(problem)
@@ -35,10 +34,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialize the set of random solutions
@@ -55,7 +52,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 e, Rimepop, Rime_rates, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -102,7 +99,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, Rimepop, Rime_rates, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -114,7 +111,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = best_pos;
 end
 
-%% --- Row normalization (avoids Neural Network Toolbox dependency on normr) ---
+% Row normalization (avoids Neural Network Toolbox dependency on normr)
 function y = normr_local(x)
     % Normalize the row vector x to unit L2 norm (identical to normr for 1 row)
     nrm = sqrt(sum(x.^2, 2));
@@ -125,7 +122,7 @@ function y = normr_local(x)
     end
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -138,7 +135,7 @@ function Positions = initialization(N, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

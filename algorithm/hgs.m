@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Hunger Games Search (HGS) for unconstrained benchmark problems
+% Hunger Games Search (HGS)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 30                % Population size
@@ -17,13 +17,17 @@
 % Expert Systems with Applications 177 (2021) 114864
 % https://doi.org/10.1016/j.eswa.2021.114864
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% Two divisions the reference leaves unguarded, both of which produced NaN
+% positions. The hunger ratio divides by (Worstest - Destination): an Inf
+% objective, which CEC2020RW RC25 really returns near its interior pole, makes
+% that Inf/Inf, so the finite range is kept as the reference and a non-finite
+% position is scored as maximally bad instead. The hunger weight divides by
+% sumHungry, which is exactly zero once every position sits at the best -- seen
+% on CEC2014 F30 at D = 100 -- and the run then filled with NaN; that case now
+% takes the reference's own no-modulation branch, weight4 = 1.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = hgs(problem)
@@ -39,11 +43,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Max_iter = (maxFE / N) + 1;
@@ -92,7 +94,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             count = 0;
         end
 
-        if worstFitness > Worstest_fitness
+        % isfinite: an Inf objective must not become the normalisation reference
+        if isfinite(worstFitness) && worstFitness > Worstest_fitness
             Worstest_fitness = worstFitness;
         end
 
@@ -106,7 +109,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 tempPosition(count, :) = X(i, :);
             else
                 temprand = rand();
-                c = (AllFitness(i) - Destination_fitness) / (Worstest_fitness - Destination_fitness) * temprand * 2 * (ub - lb);
+                if ~isfinite(AllFitness(i))
+                    ratio = 1;   % a non-finite objective is maximally bad, not a NaN ratio
+                elseif Worstest_fitness > Destination_fitness
+                    ratio = (AllFitness(i) - Destination_fitness) / (Worstest_fitness - Destination_fitness);
+                else
+                    ratio = 0;   % no spread yet, so nothing separates this position from the best
+                end
+                c = ratio * temprand * 2 * (ub - lb);
                 if c < 100
                     b = 100 * (1 + temprand);
                 else
@@ -121,7 +131,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         for i = 1:size(X, 1)
             for j = 2:size(X, 2)
                 weight3(i, j) = (1 - exp(-abs(hungry(1, i) - sumHungry))) * rand() * 2;
-                if rand() < VC2
+                if rand() < VC2 && sumHungry > 0
                     weight4(i, j) = hungry(1, i) * size(X, 1) / sumHungry * rand();
                 else
                     weight4(i, j) = 1;
@@ -135,7 +145,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = Destination_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, X, AllFitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -170,7 +180,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function Positions = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1

@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Rat Swarm Optimizer (RSO) for unconstrained benchmark problems
+% Rat Swarm Optimizer (RSO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   Search_Agents = 30    % Population size (number of rats)
@@ -17,13 +17,7 @@
 % Journal of Ambient Intelligence and Humanized Computing 12 (2021) 8457-8482
 % https://doi.org/10.1007/s12652-020-02580-0
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = rso(problem)
@@ -39,11 +33,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, Search_Agents, dim);
-    fitness_history = zeros(history_size, Search_Agents);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Position = zeros(1, dim);
@@ -84,7 +76,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = Score;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, Positions, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -111,7 +103,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function Pos = init(SearchAgents, dimension, upperbound, lowerbound)
     Boundary = size(upperbound, 2);
     if Boundary == 1

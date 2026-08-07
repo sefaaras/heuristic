@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Bonobo Optimizer (BO) for unconstrained benchmark problems
+% Bonobo Optimizer (BO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 30                     % Population size
@@ -21,13 +21,7 @@
 % Applied Intelligence 52 (2022) 2942-2974
 % https://doi.org/10.1007/s10489-021-02444-w
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = bo(problem)
@@ -43,11 +37,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, d);
-    fitness_history = zeros(history_size, N);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Algorithm-specific parameters
@@ -75,7 +67,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = bestcost;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, bonobo, cost, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -191,7 +183,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = bestcost;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, bonobo, cost, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end

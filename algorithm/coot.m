@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Coot Optimization Algorithm (COOT) for unconstrained benchmark problems
+% Coot Optimization Algorithm (COOT)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 30                     % Population size (coots + leaders)
@@ -15,14 +15,14 @@
 % A new optimization method based on COOT bird natural life model,
 % Expert Systems with Applications 183 (2021) 115352
 % https://doi.org/10.1016/j.eswa.2021.115352
+%
+% Implementation Note:
+%   curve and best_fitness track the best point the run has evaluated. gBest is
+%   updated in the leader phase alone, as the reference has it, so it stays the
+%   leaders' attractor and the search trajectory is unchanged; reporting gBest
+%   directly would lag the best point found by a full generation.
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = coot(problem)
@@ -38,11 +38,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Max_iter = (maxFE / N) + 1;
@@ -57,20 +55,19 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     gBest = zeros(1, dim);
     gBestScore = inf;
 
+    % Best point evaluated so far, kept apart from the attractor gBest
+    bsf_fit = inf;
+    bsf_x = zeros(1, dim);
+
     % Initialize the positions of Coots
-    CootPos = zeros(Ncoot, dim);
-    LeaderPos = zeros(NLeader, dim);
-    for i = 1:NLeader
-        CootPos(i, :) = rand(1, dim) .* (ub - lb) + lb;
-        LeaderPos(i, :) = rand(1, dim) .* (ub - lb) + lb;
-    end
-    CootFitness = zeros(1, Ncoot);
-    LeaderFit = zeros(1, NLeader);
+    CootPos = rand(Ncoot, dim) .* (ub - lb) + lb;
+    LeaderPos = rand(NLeader, dim) .* (ub - lb) + lb;
 
     % Initial evaluation of coots
     FE_before = FE;
     [CootFitness, FE] = calculate_fitness(CootPos', problem, FE);
     CootFitness = CootFitness(:)';
+    [bsf_fit, bsf_x] = track_best(CootFitness, CootPos, bsf_fit, bsf_x);
     for i = 1:size(CootPos, 1)
         if (gBestScore > CootFitness(1, i))
             gBestScore = CootFitness(1, i);
@@ -80,6 +77,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     % Initial evaluation of leaders
     [LeaderFit, FE] = calculate_fitness(LeaderPos', problem, FE);
     LeaderFit = LeaderFit(:)';
+    [bsf_fit, bsf_x] = track_best(LeaderFit, LeaderPos, bsf_fit, bsf_x);
     for i = 1:size(LeaderPos, 1)
         if (gBestScore > LeaderFit(1, i))
             gBestScore = LeaderFit(1, i);
@@ -88,10 +86,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     end
     for eval_count = (FE_before + 1):FE
         if eval_count <= maxFE
-            curve(eval_count) = gBestScore;
+            curve(eval_count) = bsf_fit;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, [CootPos; LeaderPos], [CootFitness, LeaderFit]', ...
-                population_history, fitness_history, history_index, sampling_interval, history_size);
+                population_history, fitness_history, history_index, maxFE);
         end
     end
 
@@ -128,6 +126,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         FE_before = FE;
         [CootFitness, FE] = calculate_fitness(CootPos', problem, FE);
         CootFitness = CootFitness(:)';
+        [bsf_fit, bsf_x] = track_best(CootFitness, CootPos, bsf_fit, bsf_x);
         for i = 1:size(CootPos, 1)
             k = 1 + mod(i, NLeader);
             if CootFitness(1, i) < LeaderFit(1, k)
@@ -141,10 +140,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         end
         for eval_count = (FE_before + 1):FE
             if eval_count <= maxFE
-                curve(eval_count) = gBestScore;
+                curve(eval_count) = bsf_fit;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, [CootPos; LeaderPos], [CootFitness, LeaderFit]', ...
-                    population_history, fitness_history, history_index, sampling_interval, history_size);
+                    population_history, fitness_history, history_index, maxFE);
             end
         end
         if FE >= maxFE
@@ -169,6 +168,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             FE_before = FE;
             [TempFit, FE] = calculate_fitness(Temp', problem, FE);
             TempFit = TempFit(1);
+            [bsf_fit, bsf_x] = track_best(TempFit, Temp, bsf_fit, bsf_x);
             if (gBestScore > TempFit)
                 LeaderFit(1, i) = gBestScore;
                 LeaderPos(i, :) = gBest;
@@ -177,10 +177,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
             for eval_count = (FE_before + 1):FE
                 if eval_count <= maxFE
-                    curve(eval_count) = gBestScore;
+                    curve(eval_count) = bsf_fit;
                     [population_history, fitness_history, history_index] = record_history(...
                         eval_count, [CootPos; LeaderPos], [CootFitness, LeaderFit]', ...
-                        population_history, fitness_history, history_index, sampling_interval, history_size);
+                        population_history, fitness_history, history_index, maxFE);
                 end
             end
             if FE >= maxFE
@@ -191,7 +191,16 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         l = l + 1;
     end
 
-    best_solution = gBest;
-    best_fitness = gBestScore;
+    best_solution = bsf_x;
+    best_fitness = bsf_fit;
 
+end
+
+% Running best over every evaluated point
+function [bf, bx] = track_best(fit, pos, bf, bx)
+    [m, j] = min(fit(:));
+    if ~isempty(m) && m < bf
+        bf = m;
+        bx = pos(j, :);
+    end
 end

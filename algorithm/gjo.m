@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Golden Jackal Optimization (GJO) for unconstrained benchmark problems
+% Golden Jackal Optimization (GJO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   SearchAgents_no = 50   % Population size (jackals)
@@ -16,8 +16,7 @@
 % Expert Systems with Applications 198 (2022) 116924.
 % https://doi.org/10.1016/j.eswa.2022.116924
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = gjo(problem)
@@ -33,10 +32,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, SearchAgents_no, dim);
-    fitness_history = zeros(history_size, SearchAgents_no);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Male_Jackal_pos = zeros(1, dim);   Male_Jackal_score = inf;
@@ -64,7 +61,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = Male_Jackal_score;
             [population_history, fitness_history, history_index] = record_history(...
                 e, Positions, fitness, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -117,7 +114,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = Male_Jackal_score;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, Positions, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -129,7 +126,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = best_pos;
 end
 
-%% --- Levy flight (n x m) ---
+% Levy flight (n x m)
 function z = levy(n, m, beta)
     num = gamma(1 + beta) * sin(pi * beta / 2);
     den = gamma((1 + beta) / 2) * beta * 2^((beta - 1) / 2);
@@ -139,7 +136,7 @@ function z = levy(n, m, beta)
     z = u ./ (abs(v).^(1 / beta));
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -152,7 +149,7 @@ function Positions = initialization(N, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

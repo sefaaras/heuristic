@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Modified Social Group Optimization (MSGO) for unconstrained benchmark
-% problems
+% Modified Social Group Optimization (MSGO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pn = 30               % Population size (group members)
@@ -21,13 +20,7 @@
 % Complex & Intelligent Systems 2 (2016) 173-203
 % https://doi.org/10.1007/s40747-016-0022-8
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = msgo(problem)
@@ -45,11 +38,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, pn, dim);
-    fitness_history = zeros(history_size, pn);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialize population
@@ -68,12 +59,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = best_fitness;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, pop, f, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     while FE < maxFE
 
-        % ---------------- Improving phase (guru) ----------------
+        % Improving phase (guru)
         [~, ibest] = min(f);
         guru = pop(ibest, :);
 
@@ -98,7 +89,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, pop, f, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -106,7 +97,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             break;
         end
 
-        % ---------------- Acquiring phase ----------------
+        % Acquiring phase
         [~, b] = min(f);
         gpop = pop(b, :);
 
@@ -144,7 +135,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, pop, f, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end

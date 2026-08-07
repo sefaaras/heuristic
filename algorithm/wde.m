@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Weighted Differential Evolution (WDE) Algorithm
+% Weighted Differential Evolution (WDE)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 50                  % Population size (uses 2*N internally)
@@ -13,41 +13,33 @@
 %
 % Reference:
 % Civicioglu, P., Besdok, E., Gunen, M.A. and Atasever, U.H. (2020),
-% Weighted differential evolution algorithm for numerical function 
-% optimization: a comparative study with cuckoo search, artificial bee 
-% colony, adaptive differential evolution, and backtracking search 
+% Weighted differential evolution algorithm for numerical function
+% optimization: a comparative study with cuckoo search, artificial bee
+% colony, adaptive differential evolution, and backtracking search
 % optimization algorithms,
 % Neural Computing and Applications, 32, 3923-3937.
 % https://doi.org/10.1007/s00521-018-3822-5
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = wde(problem)
     
     % Extract problem parameters
-    D = problem.dimension;        % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    D = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % WDE Parameters
     N = 50;                       % Base population size (uses 2*N internally)
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, 2*N, D);
-    fitness_history = zeros(history_size, 2*N);
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Ensure bounds are vectors
@@ -71,7 +63,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = best_fitness_current;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, P, fitP, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Calculate maximum epochs
@@ -161,7 +153,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness_current;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, P, fitP, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -179,7 +171,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Crossover Mask Generation ---
+% Crossover Mask Generation
 function M = GenM(N, D)
     M = zeros(N, D);
     for i = 1:N
@@ -194,7 +186,7 @@ function M = GenM(N, D)
     end
 end
 
-%% --- Population Initialization ---
+% Population Initialization
 function pop = GenP(N, D, low, up)
     pop = zeros(N, D);
     for i = 1:N
@@ -204,7 +196,7 @@ function pop = GenP(N, D, low, up)
     end
 end
 
-%% --- Boundary Control ---
+% Boundary Control
 function pop = BoundaryControl(pop, low, up)
     [popsize, dim] = size(pop);
     for i = 1:popsize

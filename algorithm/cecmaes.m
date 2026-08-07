@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% CE-CMAES (Cross-Entropy + CMA-ES hybrid) for unconstrained problems
+% Cross-Entropy CMA-ES (CE-CMAES)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   I_NP = 100        % Population size
@@ -12,24 +12,28 @@
 %   - Phase 2 (second half): CMA-ES local exploitation seeded from the CE
 %     best (covariance C, evolution paths psc/pc, step size sigma).
 %
-% References (hybrid + components):
-% D. Dabhi, K. Pandya, J. Soares, F. Lezama, Z. Vale, "Cross Entropy
-%   Covariance Matrix Adaptation Evolution Strategy...", Energies 15(13)
-%   (2022) 4838. https://doi.org/10.3390/en15134838  (closest published
-%   CE-CMAES; this file is a generic-benchmark adaptation of the same idea)
-% Cross-Entropy method: R. Y. Rubinstein, D. P. Kroese, The Cross-Entropy
-%   Method, Springer, 2004.
-% CMA-ES: N. Hansen, A. Ostermeier, "Completely Derandomized Self-Adaptation
-%   in Evolution Strategies," Evolutionary Computation 9(2) (2001) 159-195.
-%   https://doi.org/10.1162/106365601750190398
+% Reference:
+% D. Dabhi, K. Pandya, J. Soares, F. Lezama, Z. Vale,
+% Cross Entropy Covariance Matrix Adaptation Evolution Strategy,
+% Energies 15(13) (2022) 4838.
+% https://doi.org/10.3390/en15134838
+% Components:
+%   Cross-Entropy method - R. Y. Rubinstein, D. P. Kroese, The Cross-Entropy
+%     Method, Springer, 2004.
+%   CMA-ES - N. Hansen, A. Ostermeier, "Completely Derandomized Self-Adaptation
+%     in Evolution Strategies," Evolutionary Computation 9(2) (2001) 159-195.
+%     https://doi.org/10.1162/106365601750190398
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% The Energies paper above is the closest published CE-CMAES; this file is a
+% generic-benchmark adaptation of the same idea rather than a port of it.
+% Covariance eigenvalues are floored at emax*1e-14 before the inverse square
+% root, and C is reset to the identity when it degenerates entirely. Without
+% the floor, rounding drives the smallest eigenvalue slightly negative once C
+% loses positive definiteness, sqrt returns a complex number, and the whole
+% population turns complex -- observed on CEC2017 F30 and CEC2022 F12.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = cecmaes(problem)
@@ -45,16 +49,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_pop_size = 100;
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, history_pop_size, D);
-    fitness_history = zeros(history_size, history_pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Ne = round(0.2 * I_NP);
 
-    %% Cross-Entropy method (phase 1)
+    % Cross-Entropy method (phase 1)
     mu = (Xmin + Xmax) / 2;
     sigma2 = (Xmax - Xmin) / 4;
     alpha = 0.9;
@@ -86,7 +87,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         if m < bsf, bsf = m; bsf_sol = pos(mi, :); end
         [curve, population_history, fitness_history, history_index] = rec_block(...
             pos, solFitness_M, ev0 + 1, FE, bsf, curve, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size, maxFE, history_pop_size);
+            history_index, maxFE);
 
         mu_old = mu;
         sigma2_old = sigma2;
@@ -105,7 +106,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         gen = gen + 1;
     end
 
-    %% CMA-ES local exploitation (phase 2)
+    % CMA-ES local exploitation (phase 2)
     FVr_bestmemit = gbest;
     xmean = FVr_bestmemit';
     sigma = 1.0;
@@ -141,6 +142,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         changemax = arx_trans1 > xmax; arx_trans1(changemax) = xmax(changemax);
         changemin = arx_trans1 < xmin; arx_trans1(changemin) = xmin(changemin);
         arx_trans = arx_trans1;
+        % arx kept at the CLAMPED draw: xmean and the rank-mu term of C are both built from it
+        arx = arx_trans';
         pos = arx_trans;
 
         ev0 = FE;
@@ -157,7 +160,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
         [curve, population_history, fitness_history, history_index] = rec_block(...
             pos, solFitness_M, ev0 + 1, FE, bsf, curve, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size, maxFE, history_pop_size);
+            history_index, maxFE);
 
         FVr_bestmemit = gbest;
         xold = xmean;
@@ -178,7 +181,15 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             eigeneval = counteval;
             C = triu(C) + triu(C, 1)';
             [B, F] = eig(C);
-            F = sqrt(diag(F));
+            e = real(diag(F));
+            emax = max(e);
+            if ~isfinite(emax) || emax <= 0
+                C = eye(D); B = eye(D); e = ones(D, 1);   % fully degenerate -> reset
+            else
+                e = max(e, emax * 1e-14);
+            end
+            B = real(B);
+            F = sqrt(e);
             invsqrtC = B * diag(F.^-1) * B';
         end
 
@@ -191,20 +202,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = bsf;
 end
 
-%% --- Record best-so-far curve + top-k history over an FE block ---
-function [curve, ph, fh, hidx] = rec_block(pop, costs, fe_from, fe_to, bestval, curve, ph, fh, hidx, si, hs, maxFE, hps)
+% Record best-so-far curve + population metrics over an FE block
+function [curve, ph, fh, hidx] = rec_block(pop, costs, fe_from, fe_to, bestval, curve, ph, fh, hidx, maxFE)
     fe_to = min(fe_to, maxFE);
     if fe_from < 1, fe_from = 1; end
     if fe_to < fe_from, return; end
-    dim = size(pop, 2);
     costs = costs(:)';
-    [sf, sidx] = sort(costs);
-    tk = min(hps, numel(costs));
-    rp = NaN(hps, dim); rf = NaN(1, hps);
-    rp(1:tk, :) = pop(sidx(1:tk), :);
-    rf(1:tk) = sf(1:tk);
     for ec = fe_from:fe_to
         curve(ec) = bestval;
-        [ph, fh, hidx] = record_history(ec, rp, rf, ph, fh, hidx, si, hs);
+        [ph, fh, hidx] = record_history(ec, pop, costs, ph, fh, hidx, maxFE);
     end
 end

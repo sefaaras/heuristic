@@ -1,10 +1,10 @@
 % ----------------------------------------------------------------------- %
-% Interior Search Algorithm (ISA) for unconstrained benchmark problems
+% Interior Search Algorithm (ISA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   n = 50                  % Population size
 %   alpha = iteration/max   % Adaptive parameter (increases over time)
-%   
+%
 % Algorithm Concept:
 %   - Inspired by interior design and decoration
 %   - Uses mirror concept to reflect solutions around a center point
@@ -19,34 +19,26 @@
 % ISA Transactions, 53(4), 1168-1183.
 % https://doi.org/10.1016/j.isatra.2014.03.018
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = is(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % ISA Parameters
     n = 50;                       % Population size
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, n, dim);
-    fitness_history = zeros(history_size, n);
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Initialize population
@@ -64,7 +56,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = best_fitness_current;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, ns, fvalue, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Main loop
@@ -138,7 +130,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness_current;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, ns, fvalue, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -151,7 +143,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1

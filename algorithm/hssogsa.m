@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Hybrid Sperm Swarm Optimization and Gravitational Search Algorithm
-% (HSSOGSA) for unconstrained benchmark problems
+% Hybrid Sperm Swarm Optimization and Gravitational Search Algorithm (HSSOGSA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   n = 30                % Population size
@@ -21,13 +20,16 @@
 % Neural Computing and Applications 33 (2021) 11739-11752
 % https://doi.org/10.1007/s00521-021-05880-4
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% The GSA mass divides by (best - worst). CEC2020RW RC25 really returns Inf near
+% its interior pole, and one Inf individual makes that Inf/Inf, so every mass and
+% then every position turns NaN. The range is therefore taken over the finite
+% fitnesses and a non-finite individual is ranked as the worst finite one, which
+% is the mass it would have carried had the objective merely been large. A
+% collapsed range, which the reference divides by directly, now gives every
+% individual the same mass instead of Inf.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = hssogsa(problem)
@@ -43,11 +45,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, n, dim);
-    fitness_history = zeros(history_size, n);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     iteration = (maxFE / n) + 1;
@@ -102,8 +102,17 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        best = min(current_fitness);
-        worst = max(current_fitness);
+        % An Inf objective must not set the range; it ranks as the worst finite one
+        finite_fit = current_fitness(isfinite(current_fitness));
+        if isempty(finite_fit)
+            best = 0;
+            worst = 0;
+        else
+            best = min(finite_fit);
+            worst = max(finite_fit);
+        end
+        ranked_fitness = current_fitness;
+        ranked_fitness(~isfinite(current_fitness)) = worst;
 
         for pp = 1:n
             if current_fitness(pp) == best
@@ -112,7 +121,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         end
 
         for i = 1:n
-            mass(i) = (current_fitness(i) - 0.99 * worst) / (best - worst);
+            if best == worst
+                mass(i) = 1;   % no spread to rank against, so every mass is equal
+            else
+                mass(i) = (ranked_fitness(i) - 0.99 * worst) / (best - worst);
+            end
         end
         for i = 1:n
             mass(i) = mass(i) * 5 / sum(mass);
@@ -151,7 +164,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = sgBestScore;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, current_position, current_fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 

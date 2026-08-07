@@ -1,7 +1,7 @@
 % ----------------------------------------------------------------------- %
-% Smell Agent Optimization (SAO) for unconstrained benchmark problems
+% Smell Agent Optimization (SAO)
 % ----------------------------------------------------------------------- %
-% Algorithm Parameters (author's canonical values):
+% Algorithm Parameters:
 %   N   = 50               % Population size (smell molecules)
 %   T   = 3                % Temperature (constant)
 %   K   = 1.38064852e-23   % Boltzmann constant
@@ -21,10 +21,12 @@
 % extensive CEC study and engineering application,
 % Knowledge-Based Systems 232 (2021) 107486.
 % https://doi.org/10.1016/j.knosys.2021.107486
-% Reference code: github.com/SALAWUDEEN/Smell-Agent-Optimization
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Implementation Note:
+% Ported from the author's released MATLAB code
+% (github.com/SALAWUDEEN/Smell-Agent-Optimization) rather than the paper.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = sao(problem)
@@ -45,10 +47,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     molecules = initialization(N, dim, ub, lb);
@@ -65,12 +65,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 e, molecules, y, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
     while FE < maxFE
-        % --- Sniffing mode ---
+        % Sniffing mode
         v = v + rand(N, dim) * smell_step;
         molecules = molecules + v;
         for i = 1:N
@@ -85,16 +85,16 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, molecules, ys, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         if FE >= maxFE, break; end
 
-        % --- Select smell source (best) and worst molecule ---
+        % Select smell source (best) and worst molecule
         [~, ai] = min(ys); x_agent = molecules(ai, :);
         [~, wi] = max(ys); x_worst = molecules(wi, :);
 
-        % --- Trailing mode (toward agent, away from worst) ---
+        % Trailing mode (toward agent, away from worst)
         molecules = molecules + rand(N, dim) * olf .* (repmat(x_agent, N, 1) - molecules) ...
                               - rand(N, dim) * olf .* (repmat(x_worst, N, 1) - molecules);
         for i = 1:N
@@ -109,12 +109,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, molecules, yt, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         if FE >= maxFE, break; end
 
-        % --- Random mode: escape when trailing failed to improve on sniffing ---
+        % Random mode: escape when trailing failed to improve on sniffing
         for i = 1:N
             if yt(i) > ys(i)
                 molecules(i, :) = molecules(i, :) + rand(1, dim) * SN;
@@ -131,7 +131,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = best_pos;
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -144,7 +144,7 @@ function Positions = initialization(N, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

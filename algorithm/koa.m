@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Kepler Optimization Algorithm (KOA) for unconstrained benchmark problems
+% Kepler Optimization Algorithm (KOA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   SearchAgents_no = 25   % Population size (planets)
@@ -19,13 +19,7 @@
 % Knowledge-Based Systems 268 (2023) 110454.
 % https://doi.org/10.1016/j.knosys.2023.110454
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = koa(problem)
@@ -41,21 +35,19 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, SearchAgents_no, dim);
-    fitness_history = zeros(history_size, SearchAgents_no);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Sun_Pos = zeros(1, dim);   % best-so-far (the Sun)
     Sun_Score = inf;
 
-    %% Controlling parameters
+    % Controlling parameters
     Tc = 3;
     M0 = 0.1;
     lambda = 15;
 
-    %% Initialization
+    % Initialization
     orbital = rand(1, SearchAgents_no);        % Orbital Eccentricity (Eq. 4)
     T = abs(randn(1, SearchAgents_no));         % Orbital Period (Eq. 5)
     Positions = initialization(SearchAgents_no, dim, ub, lb);
@@ -75,7 +67,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = Sun_Score;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, Positions, PL_Fit, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -197,7 +189,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = Sun_Score;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, Positions, PL_Fit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE
                 break;
@@ -211,7 +203,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Sun_Pos;
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = length(ub);
     if Boundary_no == 1

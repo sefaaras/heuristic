@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Child Drawing Development Optimization (CDDO) for unconstrained problems
+% Child Drawing Development Optimization (CDDO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nPop = 50    % Population size (children)
@@ -20,13 +20,7 @@
 % Arabian Journal for Science and Engineering 47 (2022) 1337-1351.
 % https://doi.org/10.1007/s13369-021-05928-6
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = cddo(problem)
@@ -50,13 +44,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nPop, nVar);
-    fitness_history = zeros(history_size, nPop);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    %% Initialization
+    % Initialization
     empty_child.Drawing = [];
     empty_child.GR = [];
     empty_child.Cost = [];
@@ -90,7 +82,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     [population_history, fitness_history, history_index] = record_children(...
         child, nPop, nVar, 1, min(FE, maxFE), population_history, fitness_history, ...
-        history_index, sampling_interval, history_size);
+        history_index, maxFE);
 
     [~, SortOrder] = sort([child.Cost]);
     for o = 1:PS
@@ -142,7 +134,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
         [population_history, fitness_history, history_index] = record_children(...
             child, nPop, nVar, FE_before + 1, min(FE, maxFE), population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     curve(min(FE, maxFE):end) = GlobalBest.Cost;
@@ -151,7 +143,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = GlobalBest.Cost;
 end
 
-%% --- Golden Ratio of a drawing, guarded against a zero denominator ---
+% Golden Ratio of a drawing, guarded against a zero denominator
 function GR = golden_ratio(drawing, p2, p3)
     denom = drawing(1, p2);
     if denom == 0
@@ -161,14 +153,14 @@ function GR = golden_ratio(drawing, p2, p3)
     end
 end
 
-%% --- Assemble children into a matrix and record over an FE block ---
-function [pop_hist, fit_hist, hist_idx] = record_children(child, nPop, dim, fe_from, fe_to, pop_hist, fit_hist, hist_idx, sampling_interval, history_size)
+% Assemble children into a matrix and record over an FE block
+function [pop_hist, fit_hist, hist_idx] = record_children(child, nPop, dim, fe_from, fe_to, pop_hist, fit_hist, hist_idx, maxFE)
     if fe_to < fe_from, return; end
     pop = reshape([child.Drawing], dim, nPop)';
     costs = [child.Cost];
     for eval_count = fe_from:fe_to
         [pop_hist, fit_hist, hist_idx] = record_history(...
             eval_count, pop, costs, pop_hist, fit_hist, hist_idx, ...
-            sampling_interval, history_size);
+            maxFE);
     end
 end

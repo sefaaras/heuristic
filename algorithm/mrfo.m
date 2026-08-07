@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Manta Ray Foraging Optimization (MRFO) Algorithm for unconstrained benchmark problems
+% Manta Ray Foraging Optimization (MRFO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nPop = 50                 % Population size
@@ -18,13 +18,7 @@
 % Engineering Applications of Artificial Intelligence 87 (2020) 103300
 % https://doi.org/10.1016/j.engappai.2019.103300
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = mrfo(problem)
@@ -39,10 +33,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nPop, dim);
-    fitness_history = zeros(history_size, nPop);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     PopPos = initialization(nPop, dim, ub, lb);
@@ -55,7 +47,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = BestF;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, PopPos, PopFit, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     MaxIt = ceil((maxFE - nPop) / (2 * nPop));
@@ -122,7 +114,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = BestF;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, PopPos, PopFit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -156,7 +148,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = BestF;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, PopPos, PopFit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -172,7 +164,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -187,7 +179,7 @@ function X = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling (Random Replacement) ---
+% Boundary Handling (Random Replacement)
 function X = space_bound(X, ub, lb)
     D = length(X);
     S = (X > ub) + (X < lb);

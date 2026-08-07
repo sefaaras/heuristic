@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Artificial Rabbits Optimization (ARO) for unconstrained benchmark problems
+% Artificial Rabbits Optimization (ARO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nPop = 50   % Population size (rabbits)
@@ -17,8 +17,7 @@
 % Engineering Applications of Artificial Intelligence 114 (2022) 105082.
 % https://doi.org/10.1016/j.engappai.2022.105082
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = aro(problem)
@@ -34,10 +33,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nPop, Dim);
-    fitness_history = zeros(history_size, nPop);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     PopPos = initialization(nPop, Dim, Up, Low);
@@ -52,7 +49,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = BestF;
             [population_history, fitness_history, history_index] = record_history(...
                 e, PopPos, PopFit, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -101,7 +98,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = BestF;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, PopPos, PopFit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -113,14 +110,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = BestX;
 end
 
-%% --- Boundary relocation (random re-init of out-of-range dims) ---
+% Boundary relocation (random re-init of out-of-range dims)
 function X = SpaceBound(X, Up, Low)
     Dim = length(X);
     S = (X > Up) + (X < Low);
     X = (rand(1, Dim) .* (Up - Low) + Low) .* S + X .* (~S);
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1

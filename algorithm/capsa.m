@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Capuchin Search Algorithm (CapSA) for unconstrained benchmark problems
+% Capuchin Search Algorithm (CapSA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   noP = 100       % Population size (capuchins)
@@ -20,13 +20,7 @@
 % Neural Computing and Applications 33 (7) (2021) 2515-2547.
 % https://doi.org/10.1007/s00521-020-05145-6
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = capsa(problem)
@@ -42,13 +36,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, noP, dim);
-    fitness_history = zeros(history_size, noP);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    %% CapSA initialization
+    % CapSA initialization
     CapPos = initialization(noP, dim, UB, LB);
 
     v = 0.1 * CapPos;          % initial velocity
@@ -71,11 +63,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, CapPos, CapFit', population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
-    %% CapSA parameters
+    % CapSA parameters
     bf = 0.70;   % Balance factor
     cr = 11.0;   % Modulus of elasticity
     g = 9.81;
@@ -84,7 +76,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     wmax = 0.8;
     wmin = 0.1;
 
-    %% CapSA main loop
+    % CapSA main loop
     for t = 1:maxite
         if FE >= maxFE, break; end
 
@@ -100,6 +92,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     a2 * (gFoodPos(j) - CapPos(i, j)) * rand;
             end
         end
+
+        % Positions as they stood when CapFit was measured; an entry moves only
+        % once that capuchin has been re-evaluated below, so the pair stays whole
+        CapRec = CapPos;
 
         % CapSA position update
         for i = 1:noP
@@ -130,12 +126,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         v0 = v;
 
         % relocation (update, exploration) and evaluation
+        CapPos = min(max(CapPos, LB), UB);
         for i = 1:noP
-            u = UB - CapPos(i, :) < 0;
-            l = LB - CapPos(i, :) > 0;
-            CapPos(i, :) = LB .* l + UB .* u + CapPos(i, :) .* ~xor(u, l);
-
             [CapFit(i, 1), FE] = calculate_fitness(CapPos(i, :)', problem, FE);
+            CapRec(i, :) = CapPos(i, :);
 
             if CapFit(i, 1) < Fit(i)
                 CapBestPos(i, :) = CapPos(i, :);
@@ -148,8 +142,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if FE <= maxFE
                 curve(FE) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
-                    FE, CapPos, CapFit', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    FE, CapRec, CapFit', population_history, fitness_history, ...
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
@@ -168,7 +162,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = gFoodPos;
 end
 
-%% --- Initialization ---
+% Initialization
 function pos = initialization(searchAgents, dim, u, l)
     Boundary_no = size(u, 2);
     if Boundary_no == 1

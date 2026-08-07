@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Artificial Electric Field Algorithm (AEFA) for unconstrained benchmark problems
+% Artificial Electric Field Algorithm (AEFA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 50                  % Population size (number of charged particles)
@@ -8,7 +8,7 @@
 %   Rpower = 1              % Distance power in force calculation
 %   Rnorm = 2               % Euclidean norm type
 %   fper = 3                % Final percentage of charges applying force
-%   
+%
 % Algorithm Concept:
 %   - Inspired by Coulomb's law and electric field theory
 %   - Each particle represents a charged particle in search space
@@ -23,22 +23,25 @@
 % Swarm and Evolutionary Computation, 48, 93-108.
 % https://doi.org/10.1016/j.swevo.2019.03.013
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% The charge maps fitness onto [1, e] across the population range. CEC2020RW RC25
+% really returns Inf near its interior pole, and one Inf particle sends the range
+% to infinity, so every charge becomes Inf/Inf and the swarm is NaN one iteration
+% later. The range is therefore taken over the finite fitnesses and a non-finite
+% particle is given the lowest charge, which is what the worst finite particle
+% already receives. The degenerate branch now matches the fitness orientation
+% instead of always returning a column.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = aefa(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % AEFA Parameters
     N = 50;                       % Population size (number of charged particles)
@@ -50,14 +53,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FCheck = 1;                   % Flag to check force application
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve - preallocate for maxFe elements
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, N, dim);  % Store population at sampled FEs
-    fitness_history = zeros(history_size, N);          % Store fitness values at sampled FEs
-    history_index = 1;                % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     % Initialize charged particles
     X = initialization(N, dim, ub, lb);  % Particle positions
@@ -77,7 +78,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         % Store history with sampling
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, X, fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Main loop
@@ -87,15 +88,17 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     while FE < maxFE && Iteration <= Max_iteration
         
         % Calculate charges based on fitness values
-        Fmax = max(fitness);
-        Fmin = min(fitness);
-        
-        if Fmax == Fmin
-            Q = ones(N, 1);
+        finite_fit = fitness(isfinite(fitness));   % an Inf objective must not set the range
+        Fmax = max(finite_fit);
+        Fmin = min(finite_fit);
+
+        if isempty(finite_fit) || Fmax == Fmin
+            Q = ones(size(fitness));
         else
             best = Fmin;
             worst = Fmax;
             Q = exp((fitness - worst) ./ (best - worst));  % Charge calculation
+            Q(~isfinite(fitness)) = 1;   % lowest charge, the value the worst finite particle gets
         end
         Q = Q ./ sum(Q);  % Normalize charges
         
@@ -158,7 +161,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness_current;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, X, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -171,7 +174,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);  % Number of boundaries
     
@@ -190,7 +193,7 @@ function X = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

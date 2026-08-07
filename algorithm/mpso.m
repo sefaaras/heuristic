@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Modified Particle Swarm Optimization (MPSO) for unconstrained benchmark problems
+% Modified Particle Swarm Optimization (MPSO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 50                  % Swarm size
@@ -18,13 +18,7 @@
 % Expert Systems with Applications 152 (2020) 113353
 % https://doi.org/10.1016/j.eswa.2020.113353
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = mpso(problem)
@@ -44,10 +38,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     curve = zeros(1, maxFE);
 
     % History storage
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialize population
@@ -72,7 +64,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = gbestValue;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, X, fX', population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     Ubest = zeros(N, dim);
@@ -142,7 +134,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = gbestValue;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, X, fX', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end

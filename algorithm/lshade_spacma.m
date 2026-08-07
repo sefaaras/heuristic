@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% L-SHADE-SPACMA (L-SHADE with Semi-Parameter Adaptation and CMA-ES)
+% L-SHADE with Semi-Parameter Adaptation and CMA-ES (L-SHADE-SPACMA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 18 * D            % Initial population size
@@ -23,13 +23,18 @@
 % 2017 IEEE Congress on Evolutionary Computation (CEC), 2017, pp. 145-152
 % https://doi.org/10.1109/CEC.2017.7969307
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% sigma = 0.5 and xmean = rand(dim,1) are written for the CEC box and are scaled
+% so they are unchanged there. On CEC2020RW RC44, whose box is 1920 wide and not
+% centred at zero, the reference's mean sits outside the population, so the first
+% (xmean - xold)/sigma sends ps to a norm the exponential cannot hold: sigma
+% becomes Inf and every CMA-ES offspring NaN by generation two. The eigen update
+% also floors the spectrum before the inverse square root, which the reference's
+% NaN/Inf/complex test on C does not cover for a real symmetric C that has drifted
+% indefinite -- negative eigenvalues make the root complex, zero ones make it Inf.
+% No positive eigenvalue at all resets C to the identity.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = lshade_spacma(problem)
@@ -54,15 +59,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History recording (store only top 100)
-    history_pop_size = 100;
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, history_pop_size, dim);
-    fitness_history = zeros(history_size, history_pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    %% Initialize the main population
+    % Initialize the main population
     popold = repmat(lu(1, :), pop_size, 1) + rand(pop_size, dim) .* repmat(lu(2, :) - lu(1, :), pop_size, 1);
     pop = popold;
 
@@ -80,8 +81,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         if i <= maxFE
             curve(i) = bsf_fit_var;
             [population_history, fitness_history, history_index] = record_top_k(...
-                i, pop, fitness', history_pop_size, dim, ...
-                population_history, fitness_history, history_index, sampling_interval, history_size);
+                i, pop, fitness', ...
+                population_history, fitness_history, history_index, maxFE);
         end
     end
 
@@ -95,9 +96,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     memory_1st_class_percentage = First_class_percentage .* ones(memory_size, 1);
 
-    %% Initialize CMA-ES parameters
-    sigma = 0.5;
-    xmean = rand(dim, 1);
+    % Initialize CMA-ES parameters; sigma and xmean are scaled to the box (see note)
+    sigma = 0.5 * mean(ub - lb) / 200;
+    xmean = ((lb + ub) / 2)' + rand(dim, 1) .* ((ub - lb)' / 200);
     mu_cma = pop_size / 2;
     weights_cma = log(mu_cma + 1/2) - log(1:mu_cma)';
     mu_cma = floor(mu_cma);
@@ -121,7 +122,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     Hybridization_flag = 1;
 
-    %% Main loop
+    % Main loop
     while FE < maxFE
         pop = popold;
         [~, sorted_index] = sort(fitness, 'ascend');
@@ -218,8 +219,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if eval_count >= 1 && eval_count <= maxFE
                 curve(eval_count) = bsf_fit_var;
                 [population_history, fitness_history, history_index] = record_top_k(...
-                    eval_count, pop, fitness', history_pop_size, dim, ...
-                    population_history, fitness_history, history_index, sampling_interval, history_size);
+                    eval_count, pop, fitness', ...
+                    population_history, fitness_history, history_index, maxFE);
             end
         end
 
@@ -266,7 +267,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        %% Linear population size reduction
+        % Linear population size reduction
         plan_pop_size = round((((min_pop_size - max_pop_size) / maxFE) * FE) + max_pop_size);
 
         if pop_size > plan_pop_size
@@ -300,7 +301,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             mueff = sum(weights_cma)^2 / sum(weights_cma .^ 2);
         end
 
-        %% CMA-ES Adaptation
+        % CMA-ES Adaptation
         if Hybridization_flag == 1
             [~, popindex] = sort(fitness);
             xold = xmean;
@@ -323,7 +324,15 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     continue;
                 end
                 [B, D_mat] = eig(C);
-                D = sqrt(diag(D_mat));
+                e = real(diag(D_mat));
+                emax = max(e);
+                if ~isfinite(emax) || emax <= 0
+                    C = eye(dim); B = eye(dim); e = ones(dim, 1);   % fully degenerate -> reset
+                else
+                    e = max(e, emax * 1e-14);   % floor the spectrum so the inverse root stays real
+                end
+                B = real(B);
+                D = sqrt(e);
                 invsqrtC = B * diag(D .^ -1) * B';
             end
         end
@@ -337,25 +346,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = bsf_solution;
 end
 
-%% --- Helper Functions ---
+% Helper Functions
 
 function [pop_hist, fit_hist, hist_idx] = record_top_k(...
-    current_fe, population, fitness, history_pop_size, dim, ...
-    pop_hist, fit_hist, hist_idx, sampling_interval, history_size)
-    if mod(current_fe, sampling_interval) == 0 || hist_idx <= history_size
-        if hist_idx <= history_size
-            current_size = size(population, 1);
-            [sorted_fit, sorted_idx] = sort(fitness);
-            top_k = min(history_pop_size, current_size);
-            rec_pop = NaN(history_pop_size, dim);
-            rec_fit = NaN(1, history_pop_size);
-            rec_pop(1:top_k, :) = population(sorted_idx(1:top_k), :);
-            rec_fit(1:top_k) = sorted_fit(1:top_k);
-            pop_hist(hist_idx, :, :) = rec_pop;
-            fit_hist(hist_idx, :) = rec_fit;
-            hist_idx = hist_idx + 1;
-        end
-    end
+    current_fe, population, fitness, ...
+    pop_hist, fit_hist, hist_idx, maxFE)
+% Kept for existing call sites; record_history stores population metrics, not raw positions
+    [pop_hist, fit_hist, hist_idx] = record_history(current_fe, population, fitness, ...
+        pop_hist, fit_hist, hist_idx, maxFE);
 end
 
 function archive = updateArchive(archive, pop, funvalue)

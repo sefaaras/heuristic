@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Sunflower Optimization (SFO) for unconstrained benchmark problems
+% Sunflower Optimization (SFO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   n = 100               % Population size (number of plants)
@@ -19,13 +19,7 @@
 % Engineering with Computers 35 (2019) 619-626
 % https://doi.org/10.1007/s00366-018-0620-8
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = sfo(problem)
@@ -46,24 +40,30 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, n, d);
-    fitness_history = zeros(history_size, n);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialize the plants
     Plants = zeros(n, d);
-    Fitness = zeros(n, 1);
     for i = 1:n
         Plants(i, :) = LB + (UB - LB) .* rand(1, d);
+    end
+
+    % An unevaluated plant keeps Inf, so it cannot pose as the best of the population
+    Fitness = inf(n, 1);
+    for i = 1:n
         [Fitness(i), FE] = calculate_fitness(Plants(i, :)', problem, FE);
         if FE >= 1 && FE <= maxFE
             curve(FE) = min(Fitness(1:i));
+        end
+        % Fitness is still Inf past i, so the field is only worth recording once
+        % every plant has been evaluated
+        if i == n && FE >= 1 && FE <= maxFE
             [population_history, fitness_history, history_index] = record_history(...
                 FE, Plants, Fitness, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -106,7 +106,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = fmin;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, Plants, Fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -116,7 +116,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function s = bound_check(s, LB, UB)
     ns_tmp = s;
     I = ns_tmp < LB;

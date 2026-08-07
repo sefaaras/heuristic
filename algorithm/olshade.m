@@ -1,9 +1,9 @@
 % ----------------------------------------------------------------------- %
-% OLSHADE-CS (Orthogonal-Learning LSHADE with Conservative Selection)
-% for unconstrained benchmark problems
+% Orthogonal-Learning L-SHADE with Conservative Selection (OLSHADE-CS)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
-%   PopSize   = 6 * n^2        % LSHADE phase population size
+%   PopSize   = 6*n^2 -> 40*n above n = 20   % LSHADE phase population size
+%   Q         = 15/25/40/50 at n = 5/10/15/20, else max(n-1, 50)  % OA levels
 %   nich_size = 10             % Neighbourhood/niche size
 %   n_opr     = 4              % Number of mutation operators
 %
@@ -19,21 +19,25 @@
 % novel selection strategy,
 % Swarm and Evolutionary Computation 68 (2022) 101010.
 % https://doi.org/10.1016/j.swevo.2021.101010
-%
-% Note: the reference implementation hardcodes the [-100,100] CEC box in the
-% orthogonal-array scaling, the mutation clamp, and the feasibility check.
-% Those are generalized here to the actual problem bounds (identical on the
-% [-100,100] CEC suites) so the algorithm also runs on CEC2020RW. The
-% orthogonal-array size Q for non-standard dimensions uses round(dim*2.5) so
-% Q stays integer (identical for the standard 5/10/15/20/30/50/100 dims).
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% The [-100,100] CEC box, hardcoded in the reference's OA scaling, mutation
+% clamp and feasibility check, is generalised to problem.lb/ub (identical on
+% the CEC suites). PopSize = 6*n^2 is the authors' own value, from Introd_Par.m
+% in P-N-Suganthan/CODES/2022-SWEVO-DE-OA-NS.zip, and sits just under the OA
+% size Q^2 because phase 2 draws its population from the phase-1 rows. That
+% release fixes Q only for n in {5,10,15,20}, so above n = 20 both constants are
+% extrapolations: Q keeps the round(2.5*n) fallback but is capped at 50 and
+% floored at n-1, the least value still supplying n OA columns, and PopSize =
+% 40*n -- 6*n^2 would leave 5 generations at n = 158. The table is off design
+% point (D=20 at 1e6, a tenth of the author budget 1e7):
+%     PopSize      F1        F2        F5
+%     6*n^2=2400   1747.6    48.6      648.6
+%     18*n=360        0.0     6.56     889.1
+%     6*n=120         0.0    10.2     1147.3
+%     (lshade)        0.0    49.1        0.0
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = olshade(problem)
@@ -49,24 +53,25 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     Par.n_opr = 4;
     Par.Printing = 0;
-    Par.PopSize = 6 * Par.n .^ 2;
+    if Par.n <= 20
+        Par.PopSize = 6 * Par.n .^ 2;
+    else
+        Par.PopSize = 40 * Par.n;
+    end
     Par.MinPopSize = 4;
     Par.nich_size = 10;
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_pop_size = 100;
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, history_pop_size, Par.n);
-    fitness_history = zeros(history_size, history_pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    %% Niche / orthogonal-array based initialization
+    % Niche / orthogonal-array based initialization
     [pop_fix, pop_near_idx_fix] = genpop(Par.n, Par.nich_size, lb, ub);
     Par.Max_FES1 = 0.2 * Par.Max_FES;
 
-    %% Phase 1: Orthogonal learning
+    % Phase 1: Orthogonal learning
     pop = pop_fix; pop_near_idx = pop_near_idx_fix;
     [fitness, FE] = calculate_fitness(pop', problem, FE);
     fitness = fitness(:);
@@ -75,7 +80,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     [curve, population_history, fitness_history, history_index] = rec_block(...
         pop, fitness, 1, FE, bestold, curve, population_history, fitness_history, ...
-        history_index, sampling_interval, history_size, maxFE, history_pop_size);
+        history_index, maxFE);
 
     hist_pos = 1;
     memory_size = 20 * Par.n;
@@ -91,7 +96,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             Par.xmin, Par.xmax, FE, Par.nich_size, res_det, Par.Printing, problem, lb, ub);
         [curve, population_history, fitness_history, history_index] = rec_block(...
             pop, fitness, ev0 + 1, FE, bestold, curve, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size, maxFE, history_pop_size);
+            history_index, maxFE);
         if FE > Par.Max_FES1 || FE >= maxFE
             stop_con = 1;
         end
@@ -115,7 +120,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     stop_con = 0; InitPop = PS1;
 
-    %% Phase 2: LSHADE ensemble
+    % Phase 2: LSHADE ensemble
     while stop_con == 0
         UpdPopSize = round((((Par.MinPopSize - InitPop) / Par.Max_FES) * (FE)) + InitPop);
         if PS1 > UpdPopSize
@@ -143,9 +148,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             Par.xmin, Par.xmax, Par.n, PS1, FE, res_det, Par.Printing, Par.Max_FES, problem, lb, ub);
         [curve, population_history, fitness_history, history_index] = rec_block(...
             EA, EA_obj, ev0 + 1, FE, bestold, curve, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size, maxFE, history_pop_size);
+            history_index, maxFE);
 
-        if (FE >= Par.Max_FES - 4 * UpdPopSize) || FE >= maxFE
+        if FE >= maxFE
             stop_con = 1;
         end
     end
@@ -156,25 +161,19 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = bestold;
 end
 
-%% --- Record best-so-far curve + top-k history over an FE block ---
-function [curve, ph, fh, hidx] = rec_block(pop, costs, fe_from, fe_to, bestval, curve, ph, fh, hidx, si, hs, maxFE, hps)
+% Record best-so-far curve + top-k history over an FE block
+function [curve, ph, fh, hidx] = rec_block(pop, costs, fe_from, fe_to, bestval, curve, ph, fh, hidx, maxFE)
     fe_to = min(fe_to, maxFE);
     if fe_from < 1, fe_from = 1; end
     if fe_to < fe_from, return; end
-    dim = size(pop, 2);
     costs = costs(:)';
-    [sf, sidx] = sort(costs);
-    tk = min(hps, numel(costs));
-    rp = NaN(hps, dim); rf = NaN(1, hps);
-    rp(1:tk, :) = pop(sidx(1:tk), :);
-    rf(1:tk) = sf(1:tk);
     for ec = fe_from:fe_to
         curve(ec) = bestval;
-        [ph, fh, hidx] = record_history(ec, rp, rf, ph, fh, hidx, si, hs);
+        [ph, fh, hidx] = record_history(ec, pop, costs, ph, fh, hidx, maxFE);
     end
 end
 
-%% --- Orthogonal-array based population ---
+% Orthogonal-array based population
 function [pop, nghbr_idx] = genpop(dim, niche_size, lb, ub)
     if dim == 5
         Q = 15;
@@ -185,7 +184,7 @@ function [pop, nghbr_idx] = genpop(dim, niche_size, lb, ub)
     elseif dim == 20
         Q = 50;
     else
-        Q = round(dim * 2.5);   % keep Q integer for non-standard dims
+        Q = max(dim - 1, min(round(dim * 2.5), 50));   % Q+1 OA columns must cover dim
     end
     J = 2;
     N = (Q^J - 1) / (Q - 1);
@@ -198,8 +197,7 @@ function [pop, nghbr_idx] = genpop(dim, niche_size, lb, ub)
 
     leng = Q^J;
     nghbr_idx = zeros(leng, niche_size);
-    % Per-row nearest-neighbour search (avoids allocating a leng-by-leng
-    % distance matrix; identical neighbours to the reference implementation).
+    % Per-row nearest-neighbour search; same neighbours as the reference, no leng-by-leng matrix
     for i = 1:leng
         d = sqrt(sum((pop - pop(i, :)).^2, 2));
         [~, sindex] = sort(d);
@@ -232,7 +230,7 @@ function A = oa_permut(q, n, j)
     A = mod(A, q);
 end
 
-%% --- Orthogonal-learning DE stage ---
+% Orthogonal-learning DE stage
 function [pop, fitness, pop_near_idx, archive_f, archive_Cr, hist_pos, bestold, bestx, current_eval, res_det] = ...
         oDE(pop, fitness, pop_near_idx, archive_f, archive_Cr, hist_pos, bestold, bestx, memory_size, ...
         ~, ~, current_eval, nich_size, res_det, Printing, problem, lb, ub)
@@ -330,7 +328,7 @@ function ui = DE(pop, bm, st, F, CR, n, NP, lb, ub)
     ui = max(min(ui, ub), lb);
 end
 
-%% --- LSHADE multi-operator (greedy/conservative) stage ---
+% LSHADE multi-operator (greedy/conservative) stage
 function [x, fitx, prob, bestold, bestx, archive, hist_pos, memory_size, archive_f, archive_Cr, current_eval, res_det] = ...
     LSHADE_MODE_greedy(x, fitx, prob, bestold, bestx, archive, hist_pos, memory_size, archive_f, archive_Cr, xmin, xmax, n, ...
     PopSize, current_eval, res_det, Printing, Max_FES, problem, lb, ub)

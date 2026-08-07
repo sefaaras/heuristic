@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Seagull Optimization Algorithm (SOA) for unconstrained benchmark problems
+% Seagull Optimization Algorithm (SOA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   Search_Agents = 30   % Population size (seagulls)
@@ -16,13 +16,7 @@
 % Knowledge-Based Systems 165 (2019) 169-196.
 % https://doi.org/10.1016/j.knosys.2018.11.024
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = soa(problem)
@@ -38,10 +32,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, Search_Agents, dimension);
-    fitness_history = zeros(history_size, Search_Agents);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Position = zeros(1, dimension);
@@ -54,11 +46,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     while l < Max_iterations
         if FE >= maxFE, break; end
 
+        Positions = min(max(Positions, Lower_bound), Upper_bound);
         for i = 1:size(Positions, 1)
-            Flag4Upper_bound = Positions(i, :) > Upper_bound;
-            Flag4Lower_bound = Positions(i, :) < Lower_bound;
-            Positions(i, :) = (Positions(i, :) .* (~(Flag4Upper_bound + Flag4Lower_bound))) + Upper_bound .* Flag4Upper_bound + Lower_bound .* Flag4Lower_bound;
-
             [fitness, FE] = calculate_fitness(Positions(i, :)', problem, FE);
             fitness_all(i) = fitness;
 
@@ -69,9 +58,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
             if FE <= maxFE
                 curve(FE) = Score;
+            end
+            % Positions is moved for the whole flock before this loop, so
+            % fitness_all only describes it again after the last re-evaluation
+            if i == size(Positions, 1) && FE <= maxFE
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, Positions, fitness_all, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
@@ -100,7 +93,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Position;
 end
 
-%% --- Initialization ---
+% Initialization
 function Pos = init(SearchAgents, dimension, upperbound, lowerbound)
     Boundary = size(upperbound, 2);
     if Boundary == 1

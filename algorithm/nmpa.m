@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Nonlinear Marine Predator Algorithm (NMPA) for benchmark problems
+% Nonlinear Marine Predator Algorithm (NMPA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N    = 25    % Population size (prey)
@@ -19,8 +19,7 @@
 % Expert Systems with Applications 203 (2022) 117395.
 % https://doi.org/10.1016/j.eswa.2022.117395
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = nmpa(problem)
@@ -38,10 +37,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Top_predator_pos = zeros(1, dim);
@@ -58,7 +55,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     Iter = 0;
     while FE < maxFE
-        % --- Detecting top predator (evaluate current prey) ---
+        % Detecting top predator (evaluate current prey)
         for i = 1:N
             Prey(i, :) = bound(Prey(i, :), ub, lb);
         end
@@ -75,12 +72,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = Top_predator_fit;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, Prey, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         if FE >= maxFE, break; end
 
-        % --- Marine memory saving ---
+        % Marine memory saving
         if Iter == 0
             fit_old = fitness; Prey_old = Prey;
         end
@@ -90,7 +87,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         fitness = Inx .* fit_old + ~Inx .* fitness;
         fit_old = fitness; Prey_old = Prey;
 
-        % --- Movement ---
+        % Movement
         Elite = repmat(Top_predator_pos, N, 1);           % Eq.(10)
         CF = abs(2 * (1 - (Iter / Max_iter)) - 2);
         RL = 0.05 * levy(N, dim, 1.5);
@@ -114,7 +111,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             Prey = Elite + P * CF * stepsize;
         end
 
-        % --- Detecting top predator (evaluate moved prey) ---
+        % Detecting top predator (evaluate moved prey)
         for i = 1:N
             Prey(i, :) = bound(Prey(i, :), ub, lb);
         end
@@ -131,19 +128,19 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = Top_predator_fit;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, Prey, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         if FE >= maxFE, break; end
 
-        % --- Marine memory saving ---
+        % Marine memory saving
         Inx = (fit_old < fitness);
         Indx = repmat(Inx, 1, dim);
         Prey = Indx .* Prey_old + ~Indx .* Prey;
         fitness = Inx .* fit_old + ~Inx .* fitness;
         fit_old = fitness; Prey_old = Prey;
 
-        % --- Eddy formation and FADs effect (Eq.16) ---
+        % Eddy formation and FADs effect (Eq.16)
         if rand() < FADs
             U = rand(N, dim) < FADs;
             Prey = Prey + CF * ((Xmin + rand(N, dim) .* (Xmax - Xmin)) .* U);
@@ -161,7 +158,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = best_pos;
 end
 
-%% --- Levy flight (n x m) ---
+% Levy flight (n x m)
 function z = levy(n, m, beta)
     num = gamma(1 + beta) * sin(pi * beta / 2);
     den = gamma((1 + beta) / 2) * beta * 2^((beta - 1) / 2);
@@ -171,7 +168,7 @@ function z = levy(n, m, beta)
     z = u ./ (abs(v).^(1 / beta));
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -184,7 +181,7 @@ function Positions = initialization(N, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

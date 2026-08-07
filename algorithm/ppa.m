@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Parasitism-Predation Algorithm (PPA) for unconstrained benchmark problems
+% Parasitism-Predation Algorithm (PPA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   n = 30   % Population size (nests)
@@ -18,13 +18,7 @@
 % Ain Shams Engineering Journal 11 (2) (2020) 293-308.
 % https://doi.org/10.1016/j.asej.2019.10.004
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = ppa(problem)
@@ -40,10 +34,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, n, d);
-    fitness_history = zeros(history_size, n);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     fitness = inf * ones(n, 1);
@@ -76,7 +68,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, nest, fitness', population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -136,7 +128,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, nest, fitness', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -147,21 +139,21 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = fmin;
 end
 
-%% --- Initialization ---
+% Initialization
 function nest = initialization(n, ub, lb)
     for i = 1:n
         nest(i, :) = lb + (ub - lb) .* rand(size(lb));
     end
 end
 
-%% --- Growth rates ---
+% Growth rates
 function [GrowthRateCrows, GrowthRateCats, GrowthRateCuckoos] = Growth_rate(n, maxiter)
     GrowthRateCrows = round(n * linspace(2 / 3, 1 / 2, maxiter));
     GrowthRateCats = round(n * linspace(0.01, 1 / 3, maxiter));
     GrowthRateCuckoos = n - GrowthRateCrows - GrowthRateCats;
 end
 
-%% --- Crows nesting (Levy flights) ---
+% Crows nesting (Levy flights)
 function nest = get_Crows(nest, lb, ub)
     n = size(nest, 1);
     beta = 3 / 2; sigma = 0.6965745; %#ok<NASGU>
@@ -179,7 +171,7 @@ function nest = get_Crows(nest, lb, ub)
     end
 end
 
-%% --- Ranking selection ---
+% Ranking selection
 function choice = RankingSelection(n, N)
     ranking = (1:n);
     weights = ranking / sum(ranking);
@@ -192,7 +184,7 @@ function choice = RankingSelection(n, N)
     end
 end
 
-%% --- Cuckoos parasitism ---
+% Cuckoos parasitism
 function new_nest = get_Cuckoos(nest, lb, ub, t, maxiter)
     pa = t / 2 / maxiter;
     n = size(nest, 1);
@@ -202,7 +194,7 @@ function new_nest = get_Cuckoos(nest, lb, ub, t, maxiter)
     new_nest = simplebounds(new_nest, lb, ub);
 end
 
-%% --- Simple bounds ---
+% Simple bounds
 function Sol = simplebounds(Sol, lb, ub)
     for i = 1:size(Sol, 1)
         Vub = Sol(i, :) > ub;
@@ -211,7 +203,7 @@ function Sol = simplebounds(Sol, lb, ub)
     end
 end
 
-%% --- Cats predation (tracking mode) ---
+% Cats predation (tracking mode)
 function [Cats, Cats_v] = get_Cats(Cats_v, Cats, gx, t, maxiter, w, lb, ub)
     perCnt = 1 - t / maxiter / 4;
     vlb = perCnt * lb;

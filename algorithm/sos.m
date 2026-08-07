@@ -1,54 +1,45 @@
 % ----------------------------------------------------------------------- %
-% Symbiotic Organisms Search (SOS) for unconstrained benchmark problems
-% a simplified version, last revised: 2014.08.27
+% Symbiotic Organisms Search (SOS)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   ecosize = 50        % Ecosystem size (population size)
 %   BF1, BF2 = 1 or 2   % Beneficial factors in mutualism phase
-%   
-% Algorithm Phases:
-%   1. Mutualism Phase   % Both organisms benefit from interaction
-%   2. Commensalism Phase % One organism benefits, other unaffected
-%   3. Parasitism Phase  % One organism benefits, other harmed
+%
+% Algorithm Concept:
+%   - Mutualism phase: both organisms benefit from the interaction
+%   - Commensalism phase: one organism benefits, the other is unaffected
+%   - Parasitism phase: one organism benefits, the other is harmed
 %
 % Reference:
-% Min-Yuan Cheng, Doddy Prayogo,         
-% Symbiotic Organisms Search: A new metaheuristic optimization algorithm, 
-% Computers & Structures 139 (2014), 98-112   
-% http://dx.doi.org/10.1016/j.compstruc.2014.03.007                          
+% Min-Yuan Cheng, Doddy Prayogo,
+% Symbiotic Organisms Search: A new metaheuristic optimization algorithm,
+% Computers & Structures 139 (2014), 98-112
+% http://dx.doi.org/10.1016/j.compstruc.2014.03.007
 % ----------------------------------------------------------------------- %
-% Written by Doddy Prayogo at National Taiwan University of Science and 
-% Technology (NTUST)
-% Email: doddyprayogo@ymail.com
+% Implementation Note:
+% Ported from the simplified reference implementation released by the paper's
+% second author (Doddy Prayogo, NTUST), revision 2014.08.27.
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = sos(problem)
     
     % Extract problem parameters
-    n = problem.dimension;       % Problem dimension
-    lb = problem.lb;             % Lower bounds
-    ub = problem.ub;             % Upper bounds
-    maxFE = problem.maxFe;       % Maximum function evaluations
+    n = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     ecosize = 50;
     
     FE=0;                           % Function of Evaluation Counter
-    curve = zeros(1, maxFE);        % Convergence curve - preallocate for maxFe elements
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;           % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, ecosize, n);     % Store population at sampled FEs
-    fitness_history = zeros(history_size, ecosize);           % Store fitness values at sampled FEs
-    history_index = 1;              % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     eco=zeros(ecosize,n);
     for i=1:ecosize
@@ -64,7 +55,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         % Store history with sampling
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, eco, fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % --- Main Looping
@@ -75,9 +66,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             % Update the best Organism
             [~, idx]=min(fitness); bestOrganism=eco(idx,:);
             
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            % Mutualism Phase
-                % Choose organism j randomly other than organism i           
+            % Mutualism phase: organism j drawn at random, other than organism i
                 j=i;
                 while i==j
                     seed=randperm(ecosize); 
@@ -109,7 +98,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = current_best;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, eco, fitness, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 if FE >= maxFE, break; end
                 
@@ -127,14 +116,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = current_best;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, eco, fitness, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 
                 if FE >= maxFE, break; end
                 
-            % End of Mutualism Phase 
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%    
-            % Commensialism Phase
+            % Commensalism phase
                 
                 % Choose organism j randomly other than organism i
                 j=i;
@@ -162,13 +149,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = current_best;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, eco, fitness, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 if FE >= maxFE, break; end
                 
-            % End of Commensalism Phase
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-            % Parasitism Phase
+            % Parasitism phase
     
                 % Choose organism j randomly other than organism i 
                 j=i;
@@ -185,8 +170,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 
                 [fitnessParasite, FE] = calculate_fitness(parasiteVector', problem, FE);
                 
-                % Kill organism j and replace it with the parasite 
-                % if the fitness is lower than the parasite
+                % Organism j is killed and replaced when the parasite scores better
                 if fitnessParasite < fitness(j)
                     fitness(j)=fitnessParasite;
                     eco(j,:)=parasiteVector;
@@ -198,12 +182,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = current_best;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, eco, fitness, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 if FE >= maxFE, break; end
             
             % End of Parasitism Phase
-            %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
                  
         end % End of Organisms' Looping
         
@@ -216,7 +199,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
     end
     
-    %% --- Boundary Handling --- 
+    % Boundary Handling
     function a=bound(a,ub,lb)
         a(a>ub)=ub(a>ub); a(a<lb)=lb(a<lb);
     end

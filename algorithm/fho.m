@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Fire Hawk Optimizer (FHO) for unconstrained benchmark problems
+% Fire Hawk Optimizer (FHO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nPop = 25                       % Population size (fire hawks + prey)
@@ -18,8 +18,7 @@
 % Artificial Intelligence Review 56 (2023) 287-363.
 % https://doi.org/10.1007/s10462-022-10173-w
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = fho(problem)
@@ -34,10 +33,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nPop, dim);
-    fitness_history = zeros(history_size, nPop);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialization
@@ -60,7 +57,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 e, Pop, Cost, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -111,7 +108,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, Pop, Cost, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -136,7 +133,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = best_pos;
 end
 
-%% --- Assign each fire hawk a territory of nearby prey (Euclidean distance) ---
+% Assign each fire hawk a territory of nearby prey (Euclidean distance)
 function PopNew = assign_territories(FHPops, Pop2, HN)
     PopNew = cell(0, 1);
     for i = 1:HN

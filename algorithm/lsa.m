@@ -1,10 +1,10 @@
 % ----------------------------------------------------------------------- %
-% Lightning Search Algorithm (LSA) for unconstrained benchmark problems
+% Lightning Search Algorithm (LSA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 50  % Population size (number of projectiles)
 %   max_ch_time = 10  % Maximum channel time before elimination
-%   
+%
 % Algorithm Concept:
 %   - Lightning propagates through the sky
 %   - Channels are created and eliminated based on energy
@@ -17,35 +17,27 @@
 % Applied Soft Computing 36 (2015) 315-333
 % http://dx.doi.org/10.1016/j.asoc.2015.07.028
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = lsa(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     N = 50;                       % Population size/number of agents
     D = dim;                      % Number of dimensions
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve - preallocate for maxFe elements
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, N, dim);  % Store population at sampled FEs
-    fitness_history = zeros(history_size, N);          % Store fitness values at sampled FEs
-    history_index = 1;                % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     % Initialize population
     Dpoint = zeros(N, D);
@@ -62,12 +54,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
     % Record best fitness for each initial evaluation
     [best_val, ~] = min(Ec);
+    filled = min(N, maxFE);     % highest curve index written so far
     for eval_count = 1:N
         curve(eval_count) = best_val;
         % Store history with sampling
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, Dpoint, Ec, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Main optimization loop
@@ -116,10 +109,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             
             % Record in curve
             if FE <= maxFE
-                curve(FE) = min(Ec);
+                curve(filled + 1:FE) = min(Ec);
+                filled = max(filled, FE);
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, Dpoint, Ec, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -169,10 +163,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     
                     % Record after focking evaluation
                     if FE <= maxFE
-                        curve(FE) = min(Ec);
+                        curve(filled + 1:FE) = min(Ec);
+                        filled = max(filled, FE);
                         [population_history, fitness_history, history_index] = record_history(...
                             FE, Dpoint, Ec, population_history, fitness_history, ...
-                            history_index, sampling_interval, history_size);
+                            history_index, maxFE);
                     end
                     if FE >= maxFE, break; end
                 end
@@ -180,22 +175,25 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             
             % Record after each agent update
             if FE <= maxFE
-                curve(FE) = min(Ec);
+                curve(filled + 1:FE) = min(Ec);
+                filled = max(filled, FE);
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, Dpoint, Ec, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
     end
     
+    curve(filled + 1:end) = min(Ec);
+
     % Select the optimal value
     [best_fitness, best_idx] = min(Ec);
     best_solution = Dpoint(best_idx, :);
     
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Marine Predators Algorithm (MPA) for unconstrained benchmark problems
+% Marine Predators Algorithm (MPA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   SearchAgents_no = 25  % Population size (number of predators/prey)
@@ -17,14 +17,15 @@
 % Marine Predators Algorithm: A nature-inspired metaheuristic,
 % Expert Systems with Applications 152 (2020) 113377
 % https://doi.org/10.1016/j.eswa.2020.113377
+%
+% Implementation Note:
+%   Marine memory saving selects with logical indexing instead of the
+%   reference's `mask.*old + ~mask.*new`. That product form reads the branch it
+%   discards, so a single Inf fitness -- which CEC2020RW produces from a blown-up
+%   constraint -- becomes 0*Inf = NaN and then poisons every later generation,
+%   since 0*NaN is NaN too. Identical wherever both branches are finite.
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = mpa(problem)
@@ -40,11 +41,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, SearchAgents_no, dim);
-    fitness_history = zeros(history_size, SearchAgents_no);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Max_iter = ceil(maxFE / (SearchAgents_no * 2));
@@ -67,7 +66,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     Prey_old = Prey;
 
     while FE < maxFE
-        % ------------------- Detecting top predator -----------------
+        % Detecting top predator
         for i = 1:size(Prey, 1)
             Flag4ub = Prey(i, :) > ub;
             Flag4lb = Prey(i, :) < lb;
@@ -83,14 +82,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        % ------------------- Marine Memory saving -------------------
+        % Marine Memory saving
         if Iter == 0
             fit_old = fitness;    Prey_old = Prey;
         end
         Inx = (fit_old < fitness);
-        Indx = repmat(Inx, 1, dim);
-        Prey = Indx .* Prey_old + ~Indx .* Prey;
-        fitness = Inx .* fit_old + ~Inx .* fitness;
+        Prey(Inx, :) = Prey_old(Inx, :);
+        fitness(Inx) = fit_old(Inx);
         fit_old = fitness;    Prey_old = Prey;
 
         for eval_count = (FE_before + 1):FE
@@ -98,14 +96,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = Top_predator_fit;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, Prey, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         if FE >= maxFE
             break;
         end
 
-        % ------------------------------------------------------------
         Elite = repmat(Top_predator_pos, SearchAgents_no, 1);   % (Eq. 10)
         CF = (1 - Iter / Max_iter)^(2 * Iter / Max_iter);
 
@@ -115,11 +112,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         for i = 1:size(Prey, 1)
             for j = 1:size(Prey, 2)
                 R = rand();
-                % ------------------ Phase 1 (Eq.12) -------------------
+                % Phase 1 (Eq.12)
                 if Iter < Max_iter / 3
                     stepsize(i, j) = RB(i, j) * (Elite(i, j) - RB(i, j) * Prey(i, j));
                     Prey(i, j) = Prey(i, j) + P * R * stepsize(i, j);
-                    % --------------- Phase 2 (Eqs. 13 & 14)----------------
+                    % Phase 2 (Eqs. 13 & 14)
                 elseif Iter > Max_iter / 3 && Iter < 2 * Max_iter / 3
                     if i > size(Prey, 1) / 2
                         stepsize(i, j) = RB(i, j) * (RB(i, j) * Elite(i, j) - Prey(i, j));
@@ -128,7 +125,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                         stepsize(i, j) = RL(i, j) * (Elite(i, j) - RL(i, j) * Prey(i, j));
                         Prey(i, j) = Prey(i, j) + P * R * stepsize(i, j);
                     end
-                    % ----------------- Phase 3 (Eq. 15)-------------------
+                    % Phase 3 (Eq. 15)
                 else
                     stepsize(i, j) = RL(i, j) * (RL(i, j) * Elite(i, j) - Prey(i, j));
                     Prey(i, j) = Elite(i, j) + P * CF * stepsize(i, j);
@@ -136,7 +133,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        % ------------------ Detecting top predator ------------------
+        % Detecting top predator
         for i = 1:size(Prey, 1)
             Flag4ub = Prey(i, :) > ub;
             Flag4lb = Prey(i, :) < lb;
@@ -152,14 +149,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        % ---------------------- Marine Memory saving ----------------
+        % Marine Memory saving
         if Iter == 0
             fit_old = fitness;    Prey_old = Prey;
         end
         Inx = (fit_old < fitness);
-        Indx = repmat(Inx, 1, dim);
-        Prey = Indx .* Prey_old + ~Indx .* Prey;
-        fitness = Inx .* fit_old + ~Inx .* fitness;
+        Prey(Inx, :) = Prey_old(Inx, :);
+        fitness(Inx) = fit_old(Inx);
         fit_old = fitness;    Prey_old = Prey;
 
         for eval_count = (FE_before + 1):FE
@@ -167,11 +163,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = Top_predator_fit;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, Prey, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
-        % ---------- Eddy formation and FADs effect (Eq 16) -----------
+        % Eddy formation and FADs effect (Eq 16)
         if rand() < FADs
             U = rand(SearchAgents_no, dim) < FADs;
             Prey = Prey + CF * ((Xmin + rand(SearchAgents_no, dim) .* (Xmax - Xmin)) .* U);
@@ -189,7 +185,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function Positions = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -204,7 +200,7 @@ function Positions = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Levy flight distribution ---
+% Levy flight distribution
 function [z] = levy(n, m, beta)
     num = gamma(1 + beta) * sin(pi * beta / 2);
     den = gamma((1 + beta) / 2) * beta * 2^((beta - 1) / 2);

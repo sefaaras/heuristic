@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Hybrid Firefly and Particle Swarm Optimization (HFPSO) for unconstrained
-% benchmark problems
+% Hybrid Firefly and Particle Swarm Optimization (HFPSO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   swarm_size = 30       % Swarm size
@@ -19,15 +18,9 @@
 % A hybrid firefly and particle swarm optimization algorithm for
 % computationally expensive numerical problems,
 % Applied Soft Computing 66 (2018) 232-249
-% (Elsevier, ScienceDirect PII: S156849461830084X)
+% https://www.sciencedirect.com/science/article/pii/S156849461830084X
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = hfpso(problem)
@@ -46,11 +39,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, swarm_size, dim);
-    fitness_history = zeros(history_size, swarm_size);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Velocity bounds (per dimension, as row vectors)
@@ -80,7 +71,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = g_best_val;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, particles_x, f_val, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     % Global-best trajectory (used by the firefly branch, two iterations back)
@@ -99,7 +90,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
         for j = 1:swarm_size
             if (it > 2) && (f_val(j) <= g_best_val_t(it - 2))
-                % --- Firefly attraction move ---
+                % Firefly attraction move
                 rij = norm(particles_x(j, :) - g_best_t(it - 2, :) / dmax);
                 alpha = 0.2;
                 beta0 = 2;
@@ -113,7 +104,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 particles_v(j, :) = particles_x(j, :) - prev_pos;
                 particles_v(j, :) = min(max(particles_v(j, :), v_min), v_max);
             else
-                % --- Standard PSO velocity/position update ---
+                % Standard PSO velocity/position update
                 r1 = rand(1, dim);
                 r2 = rand(1, dim);
                 particles_v(j, :) = w * particles_v(j, :) ...
@@ -150,7 +141,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = g_best_val;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, particles_x, f_val, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end

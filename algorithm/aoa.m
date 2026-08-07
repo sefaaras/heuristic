@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Archimedes Optimization Algorithm (AOA) for unconstrained benchmark problems
+% Archimedes Optimization Algorithm (AOA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   Materials_no = 30       % Population size (number of objects)
@@ -19,13 +19,7 @@
 % Applied Intelligence 51 (2021) 1531-1551
 % https://doi.org/10.1007/s10489-020-01893-z
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = aoa(problem)
@@ -44,11 +38,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage (1/10000 sampling, consistent with the framework)
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, Materials_no, dim);
-    fitness_history = zeros(history_size, Materials_no);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialization
@@ -78,7 +70,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = Scorebest;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, X, Y', population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     % Main loop (t used only for the transfer/density schedules)
@@ -161,7 +153,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = Scorebest;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, X, Y', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -170,7 +162,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Xbest;
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function vec_pos = fun_checkpositions(vec_pos, var_no_group, Lb, Ub)
     for i = 1:var_no_group
         isBelow    = vec_pos(i, :) < Lb;

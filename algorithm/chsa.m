@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Chameleon Swarm Algorithm (CSA) for unconstrained benchmark problems
+% Chameleon Swarm Algorithm (CSA)
 % ----------------------------------------------------------------------- %
 % NOTE: The original acronym is "CSA"; it is stored here as `chsa` because
 % the CSA name is already used by another algorithm in this suite.
@@ -19,13 +19,7 @@
 % Expert Systems with Applications 174 (2021) 114685.
 % https://doi.org/10.1016/j.eswa.2021.114685
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = chsa(problem)
@@ -46,13 +40,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, searchAgents, dim);
-    fitness_history = zeros(history_size, searchAgents);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    %% Initial population
+    % Initial population
     chameleonPositions = initialization(searchAgents, dim, ub, lb);
 
     fit = zeros(searchAgents, 1);
@@ -74,11 +66,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, chameleonPositions, fit', population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
-    %% CSA main parameters
+    % CSA main parameters
     rho = 1.0;
     p1 = 2.0;
     p2 = 2.0;
@@ -88,7 +80,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     alpha = 4.0;
     beta = 3.0;
 
-    %% Start CSA
+    % Start CSA
     for t = 1:iteMax
         if FE >= maxFE, break; end
 
@@ -130,11 +122,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         end
 
         % Relocation of chameleon positions (randomization) and evaluation
+        chameleonPositions = min(max(chameleonPositions, lb), ub);
         for i = 1:searchAgents
-            ub_ = sign(chameleonPositions(i, :) - ub) > 0;
-            lb_ = sign(chameleonPositions(i, :) - lb) < 0;
-            chameleonPositions(i, :) = (chameleonPositions(i, :) .* (~xor(lb_, ub_))) + ub .* ub_ + lb .* lb_;
-
             [fit(i, 1), FE] = calculate_fitness(chameleonPositions(i, :)', problem, FE);
 
             if fit(i) < fitness(i)
@@ -147,9 +136,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
             if FE <= maxFE
                 curve(FE) = bsf;
+            end
+            % the swarm is relocated before this loop, so fit only describes
+            % chameleonPositions again once the last agent has been re-evaluated
+            if i == searchAgents && FE <= maxFE
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, chameleonPositions, fit', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
@@ -168,7 +161,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = fmin0;
 end
 
-%% --- Initialization ---
+% Initialization
 function pos = initialization(searchAgents, dim, u, l)
     Boundary_no = size(u, 2);
     if Boundary_no == 1

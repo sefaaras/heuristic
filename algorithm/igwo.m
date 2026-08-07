@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Improved Grey Wolf Optimizer (I-GWO) for unconstrained benchmark problems
+% Improved Grey Wolf Optimizer (I-GWO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 50   % Population size (number of wolves)
@@ -17,13 +17,7 @@
 % Expert Systems with Applications 166 (2021) 113917
 % https://doi.org/10.1016/j.eswa.2020.113917
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = igwo(problem)
@@ -41,10 +35,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     curve = zeros(1, maxFE);
 
     % History storage
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Leaders
@@ -68,7 +60,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = best_so_far;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, Positions, Fit', population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     % Main loop
@@ -91,7 +83,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         % a decreases linearly from 2 to 0 over the FE budget
         a = 2 - FE * (2 / maxFE);
 
-        % --- Candidate position Xi-GWO ---
+        % Candidate position Xi-GWO
         X_GWO = zeros(N, dim);
         for i = 1:N
             for j = 1:dim
@@ -117,7 +109,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         [Fit_GWO, FE] = calculate_fitness(X_GWO', problem, FE);
         Fit_GWO = Fit_GWO(:)';
 
-        % --- Candidate position Xi-DLH ---
+        % Candidate position Xi-DLH
         radius = sqrt(sum((Positions - X_GWO).^2, 2));      % Eq. (10), per-wolf radius
         dist_Position = pairwise_dist(Positions);           % all-pair euclidean distances
         r1p = randperm(N, N);
@@ -136,13 +128,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         [Fit_DLH, FE] = calculate_fitness(X_DLH', problem, FE);
         Fit_DLH = Fit_DLH(:)';
 
-        % --- Selection (Eq. 13) ---
+        % Selection (Eq. 13)
         tmp = Fit_GWO < Fit_DLH;
         tmp_rep = repmat(tmp', 1, dim);
         tmpFit = tmp .* Fit_GWO + (1 - tmp) .* Fit_DLH;
         tmpPositions = tmp_rep .* X_GWO + (1 - tmp_rep) .* X_DLH;
 
-        % --- Updating personal bests ---
+        % Updating personal bests
         tmp = pBestScore <= tmpFit;
         tmp_rep = repmat(tmp', 1, dim);
         pBestScore = tmp .* pBestScore + (1 - tmp) .* tmpFit;
@@ -160,7 +152,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_so_far;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, Positions, Fit', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -170,7 +162,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Positions(index, :);
 end
 
-%% --- All-pair euclidean distance matrix (replaces squareform(pdist(X))) ---
+% All-pair euclidean distance matrix (replaces squareform(pdist(X)))
 function D = pairwise_dist(X)
     G = X * X';
     sq = diag(G);
@@ -179,7 +171,7 @@ function D = pairwise_dist(X)
     D = sqrt(D2);
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function Positions = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -192,7 +184,7 @@ function Positions = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling (reflect to midpoint) ---
+% Boundary Handling (reflect to midpoint)
 function vi = boundConstraint(vi, pop, lu)
     [NP, ~] = size(pop);
     xl = repmat(lu(1, :), NP, 1);

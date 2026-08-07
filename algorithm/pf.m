@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Pathfinder Algorithm (PFA) for unconstrained benchmark problems
+% Pathfinder Algorithm (PFA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 50   % Population size
@@ -16,14 +16,16 @@
 % A new meta-heuristic optimizer: Pathfinder algorithm,
 % Applied Soft Computing 78 (2019) 545-568
 % https://doi.org/10.1016/j.asoc.2019.03.012
+%
+% Implementation Note:
+%   The pathfinder is bounded element by element, the way the reference already
+%   bounds its followers. Guarding that clamp with all(path_ < Lb) only repairs a
+%   vector that is outside on every coordinate at once, so single coordinates
+%   left the box and were evaluated there: 1.2 % of this file's evaluations, by
+%   up to 72.8 box widths. The numeric CEC mex accepts such a point without
+%   complaint, which puts the run outside the pool's shared search region.
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = pf(problem)
@@ -40,10 +42,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     curve = zeros(1, maxFE);
 
     % History storage
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, pop_size, problem_size);
-    fitness_history = zeros(history_size, pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initial population
@@ -65,7 +65,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = fit_global;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, pop, fitness', population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     while FE < maxFE
@@ -88,12 +88,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
         % Movement of the pathfinder
         path_(1, :) = path_(1, :) + (2 .* r3(1, :)) .* (path__old(1, :) - path_(1, :)) + A(1, :);
-        if all(path_(1, :) < Lb)
-            path_(1, :) = Lb;
-        end
-        if all(path_(1, :) > Ub)
-            path_(1, :) = Ub;
-        end
+        I = path_(1, :) < Lb; path_(1, I) = Lb(I);
+        I = path_(1, :) > Ub; path_(1, I) = Ub(I);
         path__old = path_;
 
         [fitx, FE] = calculate_fitness(path_(1, :)', problem, FE);
@@ -140,7 +136,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = fit_global;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, pop, fitness', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end

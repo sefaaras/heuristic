@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Adaptive Opposition Slime Mould Algorithm (AOSMA) for unconstrained
-% benchmark problems
+% Adaptive Opposition Slime Mould Algorithm (AOSMA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N   = 30     % Population size (slime mould)
@@ -18,13 +17,19 @@
 % Soft Computing 25 (22) (2021) 14297-14313.
 % https://doi.org/10.1007/s00500-021-06140-2
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% Eq.(6) divides by (best - worst), and the inherited "+ eps" only covers a zero
+% span, not a non-finite one. CEC2020RW RC25 really returns Inf near its interior
+% pole, and a single Inf smell makes the span -Inf, every ratio Inf/Inf and the
+% whole population NaN within one generation. The span is therefore taken over
+% the finite smells and a non-finite smell is given the worst ratio. Same defect
+% and same treatment as the SMA base this algorithm extends.
+% An accepted opposite solution now carries its fitness: the reference replaces
+% X but leaves AllFitness at the pre-opposition value, and that value survives
+% into the next generation as oldfitness, which orders the smell index and sets
+% p in Eq.(4). The improvement was therefore made and then forgotten.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = aosma(problem)
@@ -40,10 +45,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     bestPositions = zeros(1, dim);
@@ -57,10 +60,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     ub = ones(1, dim) .* ub;
     del = 0.03;
 
+    X = min(max(X, lb), ub);
     for i = 1:N
-        Flag4ub = X(i, :) > ub;
-        Flag4lb = X(i, :) < lb;
-        X(i, :) = (X(i, :) .* (~(Flag4ub + Flag4lb))) + ub .* Flag4ub + lb .* Flag4lb;
         [AllFitness(i), FE] = calculate_fitness(X(i, :)', problem, FE);
     end
 
@@ -72,7 +73,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, X, AllFitness', population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -83,14 +84,24 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         worstFitness = SmellOrder(N);
         bestFitness = SmellOrder(1);
 
+        % The span is taken over the finite smells; a non-finite worst makes every ratio NaN
+        finiteSmell = SmellOrder(isfinite(SmellOrder));
+        if ~isempty(finiteSmell)
+            worstFitness = finiteSmell(end);
+        else
+            worstFitness = bestFitness;
+        end
         S = bestFitness - worstFitness + eps;
+
+        ratio = (bestFitness - SmellOrder) / S;
+        ratio(~isfinite(SmellOrder)) = 1;   % a non-finite smell is the worst one, not a NaN
 
         for i = 1:N
             for j = 1:dim
                 if i <= (N / 2)   % Eq. (6)
-                    weight(SmellIndex(i), j) = 1 + rand() * log10((bestFitness - SmellOrder(i)) / (S) + 1);
+                    weight(SmellIndex(i), j) = 1 + rand() * log10(ratio(i) + 1);
                 else
-                    weight(SmellIndex(i), j) = 1 - rand() * log10((bestFitness - SmellOrder(i)) / (S) + 1);
+                    weight(SmellIndex(i), j) = 1 - rand() * log10(ratio(i) + 1);
                 end
             end
         end
@@ -122,19 +133,21 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
+        X = min(max(X, lb), ub);
         for i = 1:N
-            Flag4ub = X(i, :) > ub;
-            Flag4lb = X(i, :) < lb;
-            X(i, :) = (X(i, :) .* (~(Flag4ub + Flag4lb))) + ub .* Flag4ub + lb .* Flag4lb;
             [AllFitness(i), FE] = calculate_fitness(X(i, :)', problem, FE);
             if AllFitness(i) < bsf
                 bsf = AllFitness(i); bsf_sol = X(i, :);
             end
             if FE <= maxFE
                 curve(FE) = bsf;
+            end
+            % X is moved for the whole population before this loop, so AllFitness
+            % only describes it again once the last agent has been re-evaluated
+            if i == N && FE <= maxFE
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, X, AllFitness', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
@@ -151,6 +164,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 [Dfit, FE] = calculate_fitness(D(i, :)', problem, FE);   % Eq. (15)
                 if Dfit < AllFitness(i)
                     X(i, :) = D(i, :);
+                    AllFitness(i) = Dfit;
                 end
                 if Dfit < bsf
                     bsf = Dfit; bsf_sol = D(i, :);
@@ -159,7 +173,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = bsf;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, X, AllFitness', population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 if FE >= maxFE, break; end
             end
@@ -174,7 +188,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = bsf;
 end
 
-%% --- Initialization ---
+% Initialization
 function [X] = initialization(N, dim, up, down)
     for i = 1:dim
         high = up(i); low = down(i);

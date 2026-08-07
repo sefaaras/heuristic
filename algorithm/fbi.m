@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Forensic-Based Investigation (FBI) for unconstrained benchmark problems
+% Forensic-Based Investigation (FBI)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NP = 50               % Population size
@@ -17,13 +17,7 @@
 % Applied Soft Computing 93 (2020) 106339
 % https://doi.org/10.1016/j.asoc.2020.106339
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = fbi(problem)
@@ -39,11 +33,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, NP, D);
-    fitness_history = zeros(history_size, NP);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     bf = inf;              % best-so-far cost (framework convention)
@@ -67,7 +59,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = bf;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, Pop, ObjVal, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -78,7 +70,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     while FE < maxFE
         FE_before = FE;
 
-        %% Investigation team - team A, Step A1
+        % Investigation team - team A, Step A1
         for i = 1:NP
             Change = fix(rand * D) + 1;
             nb1 = floor(rand * NP) + 1;
@@ -107,7 +99,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        %% Step A2
+        % Step A2
         if min(ObjValA) < max(ObjValA)
             prob = probability(ObjValA);
             for i = 1:NP
@@ -150,7 +142,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        %% Pursuing team - team B, Step B1
+        % Pursuing team - team B, Step B1
         for i = 1:NP
             SolB = PopB(i, 1:D);
             for j = 1:D
@@ -170,7 +162,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
 
-        %% Step B2
+        % Step B2
         for i = 1:NP
             rr = floor(rand() * NP) + 1;
             while rr == i
@@ -208,7 +200,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = bf;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, PopA, ObjValA, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -218,7 +210,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Objective evaluation: threads FE and best-so-far ---
+% Objective evaluation: threads FE and best-so-far
 function [z, FE, bf, bs] = evalp(pos, problem, FE, bf, bs)
     [z, FE] = calculate_fitness(pos', problem, FE);
     if z < bf
@@ -227,7 +219,7 @@ function [z, FE, bf, bs] = evalp(pos, problem, FE, bf, bs)
     end
 end
 
-%% --- Rescale a [0,1] matrix into [LB,UB] ---
+% Rescale a [0,1] matrix into [LB,UB]
 function f = rescale_matrix(X, LB, UB)
     [NP, D] = size(X);
     f = zeros(NP, D);
@@ -236,7 +228,7 @@ function f = rescale_matrix(X, LB, UB)
     end
 end
 
-%% --- Selection probability (Eq.3) ---
+% Selection probability (Eq.3)
 function prob = probability(fObjV)
     prob = (max(fObjV) - fObjV) / ((max(fObjV) - min(fObjV)));
 end

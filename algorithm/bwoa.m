@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Black Widow Optimization Algorithm (BWOA) for unconstrained benchmark
-% problems
+% Black Widow Optimization Algorithm (BWOA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 40                     % Population size
@@ -20,13 +19,12 @@
 % Engineering Applications of Artificial Intelligence 87 (2020) 103249
 % https://doi.org/10.1016/j.engappai.2019.103249
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% Positions are clamped to the box inside the shared evaluation helper, which
+% also returns the clamped point so the stored individual matches what was
+% evaluated. The reference applies no bound handling.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = bwoa(problem)
@@ -51,11 +49,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nPop, dim);
-    fitness_history = zeros(history_size, nPop);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     individual.Position = [];
@@ -68,7 +64,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     % Generating the initial population
     for i = 1:nPop
         pop(i).Position = initializationBW(dim, ub, lb);
-        [pop(i).Cost, FE, bf, bs] = evalp(pop(i).Position, problem, FE, bf, bs);
+        [pop(i).Cost, FE, bf, bs, pop(i).Position] = evalp(pop(i).Position, problem, FE, bf, bs);
     end
 
     % Sorting the population
@@ -79,7 +75,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     [population_history, fitness_history, history_index, curve] = record_block(...
         0, FE, maxFE, bf, pop, dim, curve, ...
-        population_history, fitness_history, history_index, sampling_interval, history_size);
+        population_history, fitness_history, history_index);
 
     while FE < maxFE
         FE_before = FE;
@@ -94,7 +90,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         for k = 1:nMutation
             i = randnum(k);
             q = Mutate(pop(i));
-            [q.Cost, FE, bf, bs] = evalp(q.Position, problem, FE, bf, bs);
+            [q.Cost, FE, bf, bs, q.Position] = evalp(q.Position, problem, FE, bf, bs);
             pop3(k) = q;
         end
 
@@ -112,7 +108,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         % Record convergence curve and history
         [population_history, fitness_history, history_index, curve] = record_block(...
             FE_before, FE, maxFE, bf, pop, dim, curve, ...
-            population_history, fitness_history, history_index, sampling_interval, history_size);
+            population_history, fitness_history, history_index);
     end
 
     best_solution = bs;
@@ -120,8 +116,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Objective evaluation: threads FE and best-so-far ---
-function [z, FE, bf, bs] = evalp(pos, problem, FE, bf, bs)
+% Objective evaluation: clamps to the box, threads FE and best-so-far
+function [z, FE, bf, bs, pos] = evalp(pos, problem, FE, bf, bs)
+    pos = min(max(pos, problem.lb), problem.ub);
     [z, FE] = calculate_fitness(pos', problem, FE);
     if z < bf
         bf = z;
@@ -129,8 +126,8 @@ function [z, FE, bf, bs] = evalp(pos, problem, FE, bf, bs)
     end
 end
 
-%% --- Record helper for a block's FE range ---
-function [pop_hist, fit_hist, hist_idx, curve] = record_block(FE_before, FE, maxFE, bestcost, pop, dim, curve, pop_hist, fit_hist, hist_idx, sampling_interval, history_size)
+% Record helper for a block's FE range
+function [pop_hist, fit_hist, hist_idx, curve] = record_block(FE_before, FE, maxFE, bestcost, pop, dim, curve, pop_hist, fit_hist, hist_idx)
     n = numel(pop);
     pos = zeros(n, dim);
     cost = zeros(1, n);
@@ -142,12 +139,12 @@ function [pop_hist, fit_hist, hist_idx, curve] = record_block(FE_before, FE, max
         if eval_count <= maxFE
             curve(eval_count) = bestcost;
             [pop_hist, fit_hist, hist_idx] = record_history(...
-                eval_count, pos, cost, pop_hist, fit_hist, hist_idx, sampling_interval, history_size);
+                eval_count, pos, cost, pop_hist, fit_hist, hist_idx, maxFE);
         end
     end
 end
 
-%% --- Initialization ---
+% Initialization
 function X = initializationBW(dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -162,7 +159,7 @@ function X = initializationBW(dim, ub, lb)
     end
 end
 
-%% --- Mutation (swap two genes) ---
+% Mutation (swap two genes)
 function q = Mutate(p)
     x = p.Position;
     nvar = numel(x);
@@ -176,7 +173,7 @@ function q = Mutate(p)
     q.Position = x;
 end
 
-%% --- Crossover with sexual/sibling cannibalism ---
+% Crossover with sexual/sibling cannibalism
 function [crosspop, FE, bf, bs] = BwCrossover(crosspop, pop, nvar, nCross, ~, nCannibalism, problem, FE, maxFE, bf, bs)
     individual.Position = [];
     individual.Cost = [];
@@ -205,8 +202,8 @@ function [crosspop, FE, bf, bs] = BwCrossover(crosspop, pop, nvar, nCross, ~, nC
             y2 = alpha .* x2 + (1 - alpha) .* x1;
             a(i + 1).Position = y1;
             a(i + 2).Position = y2;
-            [a(i + 1).Cost, FE, bf, bs] = evalp(a(i + 1).Position, problem, FE, bf, bs);
-            [a(i + 2).Cost, FE, bf, bs] = evalp(a(i + 2).Position, problem, FE, bf, bs);
+            [a(i + 1).Cost, FE, bf, bs, a(i + 1).Position] = evalp(a(i + 1).Position, problem, FE, bf, bs);
+            [a(i + 2).Cost, FE, bf, bs, a(i + 2).Position] = evalp(a(i + 2).Position, problem, FE, bf, bs);
         end
 
         Costs = [a.Cost];

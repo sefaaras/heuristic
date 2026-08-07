@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Bald Eagle Search (BES) for unconstrained benchmark problems
+% Bald Eagle Search (BES)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nPop = 100            % Population size
@@ -16,13 +16,7 @@
 % Artificial Intelligence Review 53 (2020) 2237-2264
 % https://doi.org/10.1007/s10462-019-09732-5
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = bes(problem)
@@ -38,11 +32,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nPop, dim);
-    fitness_history = zeros(history_size, nPop);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     BestSol.cost = inf;
@@ -65,7 +57,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = BestSol.cost;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, pop.pos, pop.cost, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -75,7 +67,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         [pop, BestSol, FE] = select_space(pop, nPop, BestSol, low, high, dim, problem, FE, maxFE);
         [population_history, fitness_history, history_index, curve] = record_block(...
             FE_before, FE, maxFE, BestSol.cost, pop.pos, pop.cost, curve, ...
-            population_history, fitness_history, history_index, sampling_interval, history_size);
+            population_history, fitness_history, history_index);
         if FE >= maxFE, break; end
 
         % 2- search in space
@@ -83,7 +75,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         [pop, BestSol, FE] = search_space(pop, BestSol, nPop, low, high, problem, FE, maxFE);
         [population_history, fitness_history, history_index, curve] = record_block(...
             FE_before, FE, maxFE, BestSol.cost, pop.pos, pop.cost, curve, ...
-            population_history, fitness_history, history_index, sampling_interval, history_size);
+            population_history, fitness_history, history_index);
         if FE >= maxFE, break; end
 
         % 3- swoop
@@ -91,7 +83,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         [pop, BestSol, FE] = swoop(pop, BestSol, nPop, low, high, problem, FE, maxFE);
         [population_history, fitness_history, history_index, curve] = record_block(...
             FE_before, FE, maxFE, BestSol.cost, pop.pos, pop.cost, curve, ...
-            population_history, fitness_history, history_index, sampling_interval, history_size);
+            population_history, fitness_history, history_index);
     end
 
     best_solution = BestSol.pos;
@@ -99,18 +91,18 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Record helper for a phase's FE range ---
-function [pop_hist, fit_hist, hist_idx, curve] = record_block(FE_before, FE, maxFE, bestcost, pos, cost, curve, pop_hist, fit_hist, hist_idx, sampling_interval, history_size)
+% Record helper for a phase's FE range
+function [pop_hist, fit_hist, hist_idx, curve] = record_block(FE_before, FE, maxFE, bestcost, pos, cost, curve, pop_hist, fit_hist, hist_idx)
     for eval_count = (FE_before + 1):FE
         if eval_count <= maxFE
             curve(eval_count) = bestcost;
             [pop_hist, fit_hist, hist_idx] = record_history(...
-                eval_count, pos, cost, pop_hist, fit_hist, hist_idx, sampling_interval, history_size);
+                eval_count, pos, cost, pop_hist, fit_hist, hist_idx, maxFE);
         end
     end
 end
 
-%% --- Stage 1: Select space ---
+% Stage 1: Select space
 function [pop, BestSol, FE] = select_space(pop, npop, BestSol, low, high, dim, problem, FE, maxFE)
     Mean = mean(pop.pos);
     lm = 2;
@@ -131,7 +123,7 @@ function [pop, BestSol, FE] = select_space(pop, npop, BestSol, low, high, dim, p
     end
 end
 
-%% --- Stage 2: Search in space ---
+% Stage 2: Search in space
 function [pop, best, FE] = search_space(pop, best, npop, low, high, problem, FE, maxFE)
     Mean = mean(pop.pos);
     a = 10;
@@ -159,7 +151,7 @@ function [pop, best, FE] = search_space(pop, best, npop, low, high, problem, FE,
     end
 end
 
-%% --- Stage 3: Swoop ---
+% Stage 3: Swoop
 function [pop, best, FE] = swoop(pop, best, npop, low, high, problem, FE, maxFE)
     Mean = mean(pop.pos);
     a = 10;
@@ -187,7 +179,7 @@ function [pop, best, FE] = swoop(pop, best, npop, low, high, problem, FE, maxFE)
     end
 end
 
-%% --- Spiral parameters (swoop) ---
+% Spiral parameters (swoop)
 function [xR, yR] = swoo_p(a, ~, N)
     th = a * pi * exp(rand(N, 1));
     r = th;
@@ -197,7 +189,7 @@ function [xR, yR] = swoo_p(a, ~, N)
     yR = yR / max(abs(yR));
 end
 
-%% --- Spiral parameters (search) ---
+% Spiral parameters (search)
 function [xR, yR] = polr(a, R, N)
     th = a * pi * rand(N, 1);
     r = th + R * rand(N, 1);

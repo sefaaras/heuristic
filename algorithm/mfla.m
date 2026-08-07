@@ -4,40 +4,34 @@
 % Algorithm Parameters:
 %   populationSize = 50    % Total population size
 %   m = 5                  % Number of memeplexes
-%   beta = 1.2             % Lévy flight parameter
+%   beta = 1.2             % Levy flight parameter
 %
 % Algorithm Concept:
 %   - Based on Shuffled Frog Leaping Algorithm (SFLA)
 %   - Uses memeplex structure (dividing population into groups)
-%   - Local search with Lévy flights
+%   - Local search with Levy flights
 %   - Mass-based gravitational attraction
 %   - Global shuffling phase with memetic operators
 %
 % Reference:
-% Tang, D., Liu, Z., Yang, J., & Zhao, J. (2019). 
-% Memetic frog leaping algorithm for global optimization. 
+% Tang, D., Liu, Z., Yang, J., & Zhao, J. (2019).
+% Memetic frog leaping algorithm for global optimization.
 % Soft Computing, 23(21), 11077-11105.
 % https://doi.org/10.1007/s00500-018-3662-3
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = mfla(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % Algorithm parameters
-    para = 1.2;                   % Lévy flight beta parameter
+    para = 1.2;                   % Levy flight beta parameter
     parap2 = 5;                   % Number of memeplexes
     m = parap2;
     populationSize = 50;          % Total population size
@@ -48,13 +42,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     M = dim;
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
     % Initialize storage for population and fitness history
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, q, dim);
-    fitness_history = zeros(history_size, q);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Initialize frog population
@@ -86,7 +78,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, current_positions, current_fitness, ...
             population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Main loop
@@ -168,7 +160,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 mbest1 = sum(tempLocalMeans, 1) / n;
                 mbest2 = sum(Gm' * ones(1, M) .* tempLocalMeans, 1);
                 
-                % Lévy flight step
+                % Levy flight step
                 sigma = (gamma(1 + beta) * sin(pi * beta / 2) / ...
                          (gamma((1 + beta) / 2) * beta * 2^((beta - 1) / 2)))^(1 / beta);
                 u = randn(size(frog(1).center)) * sigma;
@@ -213,7 +205,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, current_positions, current_fitness, ...
                         population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 
                 if FE >= maxFE
@@ -275,7 +267,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, current_positions, current_fitness, ...
                     population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             
             if FE >= maxFE
@@ -291,7 +283,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Helper Functions ---
+% Helper Functions
 
 function [M] = massCalculation(fit, min_flag)
     % Mass calculation based on fitness values

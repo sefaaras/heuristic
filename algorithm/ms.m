@@ -1,51 +1,49 @@
 % ----------------------------------------------------------------------- %
-% Moth Search (MS) Algorithm
+% Moth Search (MS)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   popsize = 50           % Population size
-%   max_step_size = 1.0    % Maximum step size for Lévy flights
+%   max_step_size = 1.0    % Maximum step size for Levy flights
 %
 % Algorithm Concept:
 %   - Best moth is viewed as the light source (phototaxis)
-%   - Moths close to best: Lévy flights for local search (exploitation)
+%   - Moths close to best: Levy flights for local search (exploitation)
 %   - Moths far from best: Direct movement towards best (exploration)
 %
 % Reference:
 % Gai-Ge Wang,
-% Moth search algorithm: a bio-inspired metaheuristic algorithm 
+% Moth search algorithm: a bio-inspired metaheuristic algorithm
 % for global optimization problems,
 % Memetic Computing 10 (2018) 151-164
 % https://doi.org/10.1007/s12293-016-0212-3
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% The greedy selection reverts the position as well as the fitness. Keeping the
+% old fitness while leaving the moth at its new, worse position made fitness stop
+% describing Moths for every moth that did not improve, and that pair is what the
+% next iteration sorts, records and measures distances against.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = ms(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % Algorithm parameters
     popsize = 50;                 % Total population size
-    max_step_size = 1.0;          % Maximum step size for Lévy flights
+    max_step_size = 1.0;          % Maximum step size for Levy flights
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
     % Initialize storage for population and fitness history
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, popsize, dim);
-    fitness_history = zeros(history_size, popsize);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Initialize moth positions
@@ -63,7 +61,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = best_fitness;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, Moths, fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Main loop
@@ -81,19 +79,19 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         % Calculate mean distance to determine threshold
         mean_distance = mean(distances);
         
+        old_Moths = Moths;
+
         % Update each moth's position based on distance to best
         for i = 1:popsize
             
             if distances(i) <= mean_distance
-                % Moth is close to light source -> Lévy flights (local search)
-                % Scale decreases with iteration for better convergence
+                % Close to the light source: Levy flights, scale shrinking with the iteration
                 scale = max_step_size / (iteration^2);
                 levy_step = LevyWalk(dim);
                 Moths(i, :) = Moths(i, :) + scale * levy_step;
                 
             else
-                % Moth is far from light source -> Phototaxis (direct movement)
-                % Move towards the best moth with a big step
+                % Far from the light source: phototaxis, a big step towards the best moth
                 step_size = rand();  % Random step size
                 Moths(i, :) = Moths(i, :) + step_size * (best_position - Moths(i, :));
             end
@@ -110,12 +108,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             % Greedy selection: keep better solution
             if new_fitness(i) < fitness(i)
                 fitness(i) = new_fitness(i);
-                
+
                 % Update global best if improved
                 if fitness(i) < best_fitness
                     best_fitness = fitness(i);
                     best_position = Moths(i, :);
                 end
+            else
+                Moths(i, :) = old_Moths(i, :);
             end
         end
         
@@ -126,7 +126,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, Moths, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -138,7 +138,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Helper Functions ---
+% Helper Functions
 
 function Positions = initialization(popsize, dim, ub, lb)
     Boundary_no = size(ub, 2);

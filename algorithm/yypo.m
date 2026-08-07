@@ -1,11 +1,11 @@
 % ----------------------------------------------------------------------- %
-% Yin-Yang-Pair Optimization (YYPO) for unconstrained benchmark problems
+% Yin-Yang-Pair Optimization (YYPO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   Imin = 2, Imax = 4   % Min and max archive size
 %   alpha = 10           % Radius reduction factor
 %   del(1) = 0.5, del(2) = 0.5  % Initial search radii
-%   
+%
 % Algorithm Concept:
 %   - Binary splitting strategy in normalized space
 %   - Two points (Yin-Yang pair) guide search
@@ -18,22 +18,25 @@
 % Engineering Applications of Artificial Intelligence 54 (2016) 62-79
 % http://dx.doi.org/10.1016/j.engappai.2016.04.004
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% A best-so-far scalar is tracked alongside the Yin-Yang pair and is what the
+% curve and the returned solution report. The splitting stage keeps only the
+% best child of each point and discards the parent, so the pair itself is not
+% monotone; reporting min(P) made the convergence curve rise. The reference
+% instead reads the result off the archive, but the archive is reset at every
+% archiving stage, so it only covers the final cycle. The search is untouched --
+% the pair, the radii and the archive still drive it exactly as before.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = yypo(problem)
     
     % Extract problem parameters
-    D = problem.dimension;         % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    D = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % Algorithm parameters
     Imin = 2; 
@@ -43,14 +46,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     del(2) = 0.5;
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history
-    % For YYPO, population size varies, so we store archive snapshots
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, 2, D);  % Store two main points
-    fitness_history = zeros(history_size, 2);        % Store their fitness values
+    % Population size varies in YYPO, so the history holds archive snapshots
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     if D <= 52
@@ -67,12 +67,16 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     [fitness_temp, FE] = calculate_fitness(ScaleP', problem, FE);
     P(:, D + 1) = fitness_temp;
     
-    % Record initial evaluations
+    % A split drops the parent, so the working set itself can get worse
+    [bsf, bsf_idx] = min(P(:, D + 1));
+    bsf_point = P(bsf_idx, 1:D);
+
+    % Record initial evaluations; the recorder works in problem coordinates
     for eval_count = 1:2
-        curve(eval_count) = min(P(:, D + 1));
+        curve(eval_count) = bsf;
         [population_history, fitness_history, history_index] = record_history(...
-            eval_count, P(:, 1:D), P(:, D + 1), population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            eval_count, ScaleP, P(:, D + 1), population_history, fitness_history, ...
+            history_index, maxFE);
     end
     
     Acount = 0;  % Archive Counter
@@ -95,14 +99,22 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         
         % Execute the splitting function for both the points
         [P, FE_new] = SplitFn(problem, BMatrixFn, D, P, del, lb, ub, FE);
-        
-        % Record curve for all new evaluations
+
+        % Each row holds the best of its own 2D children, so min(P) covers this split
+        [split_best, split_idx] = min(P(:, D + 1));
+        if split_best < bsf
+            bsf = split_best;
+            bsf_point = P(split_idx, 1:D);
+        end
+
+        % Record curve for all new evaluations, in problem coordinates
+        Pscaled = repmat(lb, size(P, 1), 1) + P(:, 1:D) .* repmat(ub - lb, size(P, 1), 1);
         for i = (FE + 1):FE_new
             if i <= maxFE
-                curve(i) = min(P(:, D + 1));
+                curve(i) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
-                    i, P(:, 1:D), P(:, D + 1), population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    i, Pscaled, P(:, D + 1), population_history, fitness_history, ...
+                    history_index, maxFE);
             end
         end
         FE = FE_new;
@@ -118,16 +130,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         
     end
     
-    % Stack the latest set of points in the Archive
-    Arch = [Arch; P];
-    
-    % Extracting the best solution
-    [best_fitness, ind] = min(Arch(:, D + 1));
-    best_solution = lb + Arch(ind, 1:D) .* (ub - lb);
+    % The archive is emptied each archiving stage, so min(Arch) misses earlier cycles
+    best_fitness = bsf;
+    best_solution = lb + bsf_point .* (ub - lb);
     
 end
 
-%% --- Helper Functions ---
+% Helper Functions
 
 function B = UseMatlabInbuilt(D)
     B = de2bi(randperm(2^D, 2*D) - ones(1, 2*D));

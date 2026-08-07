@@ -1,9 +1,9 @@
 % ----------------------------------------------------------------------- %
-% Chaos Game Optimization (CGO) for unconstrained benchmark problems
+% Chaos Game Optimization (CGO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   Seed_Number = 25         % Population size (number of seeds)
-%   
+%
 % Algorithm Concept:
 %   - Inspired by chaos game theory and fractal patterns
 %   - Uses random groups and mean positions for exploration
@@ -20,34 +20,26 @@
 % Artificial Intelligence Review, 54(2), 917-1004.
 % https://doi.org/10.1007/s10462-020-09867-w
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = cgo(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     Seed_Number = 25;             % Population size (number of seeds)
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve - preallocate for maxFe elements
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, Seed_Number, dim);  % Store population at sampled FEs
-    fitness_history = zeros(history_size, Seed_Number);          % Store fitness values at sampled FEs
-    history_index = 1;                % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     % Initialize population
     Seed = initialization(Seed_Number, dim, ub, lb);
@@ -66,7 +58,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         % Store history with sampling
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, Seed, Fun_eval', population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Preallocate for new seeds
@@ -86,8 +78,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             [~, idbest] = min(Fun_eval);
             BestSeed = Seed(idbest, :);
             
-            %% Generate New Solutions
-            % Random Numbers
+            % Random numbers for the new solutions
             I = randi([1, 2], 1, 12);  % Beta and Gamma
             Ir = randi([0, 1], 1, 5);
             
@@ -112,8 +103,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             ii = randi([1, 4], 1, 3);
             SelectedAlfa = Alfa(ii, :);
             
-            % Generate 4 new seeds using different strategies
-            % Strategy 1: Current seed + Alpha * (Best - MeanGroup)
+            % Strategy 1 of 4: current seed + Alpha * (Best - MeanGroup)
             NewSeed(1, :) = Seed(i, :) + SelectedAlfa(1, :) .* (I(1) * BestSeed - I(2) * MeanGroup);
             
             % Strategy 2: Best + Alpha * (MeanGroup - Current)
@@ -157,7 +147,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     topFit = Fun_eval(topIdx)';
                     [population_history, fitness_history, history_index] = record_history(...
                         eval_count, topSeed, topFit, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
             end
         end
@@ -176,7 +166,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function Positions = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);  % Number of boundaries
     
@@ -195,7 +185,7 @@ function Positions = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

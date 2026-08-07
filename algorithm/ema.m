@@ -1,11 +1,10 @@
 % ----------------------------------------------------------------------- %
-% Exchange Market Algorithm (EMA) for unconstrained benchmark problems
+% Exchange Market Algorithm (EMA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   popsize = 50          % Number of shareholders (population size)
 %   g1 = g2 = [0.2 0.05]  % Maximum/minimum risk levels
-%   Group ratios: 0.2 / 0.3 / 0.5 (non-oscillation),
-%                 0.2 / 0.5 / 0.3 (oscillation)
+%   group_ratios = 0.2/0.3/0.5 non-osc, 0.2/0.5/0.3 osc   % Shareholder split
 %
 % Algorithm Concept:
 %   - Models the behaviour of shareholders trading in a stock market
@@ -20,13 +19,7 @@
 % Applied Soft Computing 19 (2014) 177-187
 % https://doi.org/10.1016/j.asoc.2014.02.006
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = ema(problem)
@@ -55,14 +48,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, num_pop, dim);
-    fitness_history = zeros(history_size, num_pop);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    % ---- First iteration: initialise and sort ----
+    % First iteration: initialise and sort
     pop = zeros(num_pop, num_par);
     for i = 1:num_pop
         pop(i, :) = lb + rand(1, num_par) .* (ub - lb);
@@ -79,14 +70,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = best_fitness;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, pop, FC, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     iteration = 1;
     while FE < maxFE
         iteration = iteration + 1;
 
-        % ---- Non-oscillation mode (Section 3.1) ----
+        % Non-oscillation mode (Section 3.1)
         pop = notoscillation(pop, num_pop, num_par, num_pop11, num_pop12);
         for ii = 1:num_pop
             pop(ii, :) = min(max(pop(ii, :), lb), ub);
@@ -105,7 +96,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, pop, FC, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -113,7 +104,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             break;
         end
 
-        % ---- Oscillation mode (Section 3.2) ----
+        % Oscillation mode (Section 3.2)
         pop = oscillation(pop, iteration, num_pop, num_par, num_iter, num_pop21, num_pop22, g1, g2);
         for ii = 1:num_pop
             pop(ii, :) = min(max(pop(ii, :), lb), ub);
@@ -132,14 +123,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, pop, FC, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
 
 end
 
-%% --- Non-oscillation trading (Eqs. 1-3) ---
+% Non-oscillation trading (Eqs. 1-3)
 function pop = notoscillation(pop, num_pop, num_par, num_pop11, num_pop12)
     comp = zeros(num_pop, num_par);
     for j = num_pop11 + 1:num_pop
@@ -159,7 +150,7 @@ function pop = notoscillation(pop, num_pop, num_par, num_pop11, num_pop12)
     end
 end
 
-%% --- Oscillation trading (Eqs. 4-11) ---
+% Oscillation trading (Eqs. 4-11)
 function pop = oscillation(pop, iteration, num_pop, num_par, num_iter, num_pop21, num_pop22, g1, g2)
     for j = num_pop21 + 1:num_pop
         risk  = g1(1, 1) - (g1(1, 1) - g1(1, 2)) * (iteration / num_iter);   % Eq. (8)

@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Mayfly Optimization Algorithm (MOA) for unconstrained benchmark problems
+% Mayfly Optimization Algorithm (MOA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nPop = 20, nPopf = 20      % Male / female population sizes
@@ -20,13 +20,7 @@
 % Computers & Industrial Engineering 145 (2020) 106559
 % https://doi.org/10.1016/j.cie.2020.106559
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = moa(problem)
@@ -59,11 +53,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nPop, dim);
-    fitness_history = zeros(history_size, nPop);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialization
@@ -95,7 +87,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     [population_history, fitness_history, history_index, curve] = record_block(...
         0, FE, maxFE, GlobalBest.Cost, Mayfly, curve, ...
-        population_history, fitness_history, history_index, sampling_interval, history_size);
+        population_history, fitness_history, history_index);
 
     % Mayfly Main Loop
     while FE < maxFE
@@ -215,7 +207,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         % Record convergence curve and history
         [population_history, fitness_history, history_index, curve] = record_block(...
             FE_before, FE, maxFE, GlobalBest.Cost, Mayfly, curve, ...
-            population_history, fitness_history, history_index, sampling_interval, history_size);
+            population_history, fitness_history, history_index);
     end
 
     best_solution = GlobalBest.Position;
@@ -223,8 +215,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Record helper for a block's FE range ---
-function [pop_hist, fit_hist, hist_idx, curve] = record_block(FE_before, FE, maxFE, bestcost, Mayfly, curve, pop_hist, fit_hist, hist_idx, sampling_interval, history_size)
+% Record helper for a block's FE range
+function [pop_hist, fit_hist, hist_idx, curve] = record_block(FE_before, FE, maxFE, bestcost, Mayfly, curve, pop_hist, fit_hist, hist_idx)
     nPop = numel(Mayfly);
     pos = reshape([Mayfly.Position], [], nPop)';   % nPop x dim
     cost = [Mayfly.Cost];                          % 1 x nPop
@@ -232,12 +224,12 @@ function [pop_hist, fit_hist, hist_idx, curve] = record_block(FE_before, FE, max
         if eval_count <= maxFE
             curve(eval_count) = bestcost;
             [pop_hist, fit_hist, hist_idx] = record_history(...
-                eval_count, pos, cost, pop_hist, fit_hist, hist_idx, sampling_interval, history_size);
+                eval_count, pos, cost, pop_hist, fit_hist, hist_idx, maxFE);
         end
     end
 end
 
-%% --- Crossover ---
+% Crossover
 function [off1, off2] = Crossover(x1, x2, LowerBound, UpperBound)
     L = unifrnd(0, 1, size(x1));
     off1 = L .* x1 + (1 - L) .* x2;
@@ -246,7 +238,7 @@ function [off1, off2] = Crossover(x1, x2, LowerBound, UpperBound)
     off2 = max(off2, LowerBound); off2 = min(off2, UpperBound);
 end
 
-%% --- Mutation ---
+% Mutation
 function y = Mutate(x, mu, LowerBound, UpperBound)
     nVar = numel(x);
     nmu = ceil(mu * nVar);

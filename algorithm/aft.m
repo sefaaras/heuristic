@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Ali Baba and the Forty Thieves (AFT) for unconstrained benchmark problems
+% Ali Baba and the Forty Thieves (AFT)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   noThieves = 30   % Population size (thieves)
@@ -17,13 +17,16 @@
 % Neural Computing and Applications 34 (1) (2022) 409-455.
 % https://doi.org/10.1007/s00521-021-06392-x
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% Thieves are clamped to the box before evaluation. The reference evaluates
+% first and only then rejects an out-of-bounds thief, so the illegal point is
+% still paid for out of the FE budget; the rejection itself survives, because a
+% clamped coordinate sits exactly on the bound and the acceptance test requires
+% every coordinate to be strictly inside. curve and best_fitness therefore track
+% the best point evaluated separately from fit0, which stays the thieves'
+% attractor and keeps that rejection.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = aft(problem)
@@ -39,10 +42,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, noThieves, dim);
-    fitness_history = zeros(history_size, noThieves);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Position of the thieves in the space
@@ -54,6 +55,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     end
 
     % Evaluate the initial population
+    xth = min(max(xth, lb), ub);
     [fit, FE] = calculate_fitness(xth', problem, FE);
     fit = fit(:);
 
@@ -67,19 +69,23 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     gbest = Sorted_thieves(1, :);
     fit0 = sorted_thieves_fitness(1);
 
+    % Best point evaluated so far; a clamped thief can never enter fit0
+    bsf_fit = fit0;
+    bsf_x = gbest;
+
     best = xth;   % per-thief best (Marjaneh's plans)
     xab = xth;    % position of Ali Baba
 
     for eval_count = 1:noThieves
         if eval_count <= maxFE
-            curve(eval_count) = fit0;
+            curve(eval_count) = bsf_fit;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, xth, fit', population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
-    %% Start running AFT
+    % Start running AFT
     for ite = 1:itemax
         if FE >= maxFE, break; end
 
@@ -106,8 +112,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         end
 
         % Update the global, best position of the thieves and Ali Baba
+        xth = min(max(xth, lb), ub);
         for i = 1:noThieves
             [fit(i, 1), FE] = calculate_fitness(xth(i, :)', problem, FE);
+            if fit(i, 1) < bsf_fit
+                bsf_fit = fit(i, 1);
+                bsf_x = xth(i, :);
+            end
 
             % Handling the boundary conditions (reject out-of-bounds thieves)
             if and(~(xth(i, :) - lb <= 0), ~(xth(i, :) - ub >= 0))
@@ -125,18 +136,21 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
 
             if FE <= maxFE
-                curve(FE) = fit0;
+                curve(FE) = bsf_fit;
+            end
+            % xth is moved for the whole swarm before this loop, so fit only
+            % describes it again once the last thief has been re-evaluated
+            if i == noThieves && FE <= maxFE
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, xth, fit', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
     end
 
-    curve(min(FE, maxFE):end) = fit0;
+    curve(min(FE, maxFE):end) = bsf_fit;
 
-    bestThieves = find(fitness == min(fitness));
-    best_solution = best(bestThieves(1), :);
-    best_fitness = min(fitness);
+    best_solution = bsf_x;
+    best_fitness = bsf_fit;
 end

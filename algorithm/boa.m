@@ -19,22 +19,24 @@
 % Soft Computing 23 (2019) 715-734
 % https://doi.org/10.1007/s00500-018-3102-4
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% Fragrance is computed from |f| rather than f. The paper's stimulus intensity
+% I in f = c*I^a is a magnitude, but the reference code substitutes the raw
+% objective; with a = 0.1 a negative objective makes f complex and the complex
+% value propagates into the positions. This is inert on the numeric CEC suites,
+% whose biases keep f positive, and repairs CEC2020RW, where the objective is
+% negative on RC03, RC04, RC05, RC32 and RC44.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = boa(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % Algorithm parameters
     n = 50;                       % Population size
@@ -43,13 +45,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     sensory_modality = 0.01;      % Initial sensory modality
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
     % Initialize storage for population and fitness history
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, n, dim);
-    fitness_history = zeros(history_size, n);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Initialize the positions of butterflies
@@ -68,11 +68,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = fmin;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, Sol, Fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Main loop
-    N_iter = ceil((maxFE - n) / (n * 2));  % Each iteration evaluates 2*n solutions
+    N_iter = ceil((maxFE - n) / n);        % Each iteration evaluates n solutions
     
     for t = 1:N_iter
         
@@ -81,7 +81,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             
             % Calculate fragrance based on fitness
             Fnew = Fitness(i);
-            FP = sensory_modality * (Fnew^power_exponent);
+            FP = sensory_modality * (abs(Fnew)^power_exponent);
             
             % Global or local search
             if rand < p
@@ -125,7 +125,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = fmin;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, Sol, Fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -144,7 +144,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Helper Functions ---
+% Helper Functions
 
 function Positions = initialization(popsize, dim, ub, lb)
     Boundary_no = size(ub, 2);

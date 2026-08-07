@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Teaching-Learning-based Artificial Bee Colony (TLABC) Algorithm
-% for unconstrained benchmark problems
+% Teaching-Learning-based Artificial Bee Colony (TLABC)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   popsize = 50           % Population size
@@ -9,10 +8,10 @@
 %   TF = round(1+rand)     % Teaching factor (1 or 2)
 %   F = rand               % Scale factor for differential evolution
 %
-% Algorithm Phases:
-%   1. Teaching-based employed bee phase  % Combines TLBO teacher phase with DE
-%   2. Learning-based onlooker bee phase  % Probabilistic selection and learning
-%   3. Generalized oppositional scout bee % Scout with opposition-based learning
+% Algorithm Concept:
+%   - Teaching-based employed bee phase: TLBO teacher phase combined with DE
+%   - Learning-based onlooker bee phase: probabilistic selection and learning
+%   - Generalized oppositional scout bee phase: opposition-based learning
 %
 % Reference:
 % Xu Chen, Bin Xu, Congli Mei, Yuhan Ding, Kangji Li,
@@ -20,22 +19,23 @@
 % Applied Energy 212 (2018) 1578-1588
 % https://doi.org/10.1016/j.apenergy.2017.12.115
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% val_gBest is refreshed at every evaluation rather than once per generation,
+% and it is what the curve records. The scout phase overwrites an abandoned
+% source unconditionally, so min(val_X) can rise and a generation-end refresh
+% can miss a best that the scout had already destroyed. The search itself is
+% unchanged: val_gBest is read, never used to steer any operator.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = tlabc(problem)
 
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    low = problem.lb;              % Lower bounds
-    up = problem.ub;               % Upper bounds
-    maxIteration = problem.maxFe;  % Maximum function evaluations
+    dim = problem.dimension;
+    low = problem.lb;
+    up = problem.ub;
+    maxIteration = problem.maxFe;
     
     % Algorithm parameters
     popsize = 50;
@@ -44,14 +44,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     CR = 0.5;
     
     FE = 0;                         % Function Evaluation Counter
-    curve = zeros(1, maxIteration); % Convergence curve
+    curve = zeros(1, maxIteration);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;           % Fixed history size
-    sampling_interval = max(1, floor(maxIteration / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, popsize, dim);     % Store population at sampled FEs
-    fitness_history = zeros(history_size, popsize);             % Store fitness values at sampled FEs
-    history_index = 1;              % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     % Initialize population
     X = repmat(low, popsize, 1) + rand(popsize, dim) .* (repmat(up - low, popsize, 1));
@@ -64,17 +62,16 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
     % Record initial best fitness and store history
     for eval_count = 1:popsize
-        [current_best, ~] = min(val_X);
         if eval_count <= maxIteration
-            curve(eval_count) = current_best;
+            curve(eval_count) = val_gBest;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, X, val_X, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxIteration);
         end
     end
     
     while FE < maxIteration
-        % ============ Teaching-based employed bee phase ============
+        % Teaching-based employed bee phase
         for i = 1:popsize
             [~, sortIndex] = sort(val_X);
             mean_result = mean(X);        % Calculate the mean
@@ -103,11 +100,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             
             % Record convergence curve and store history
             if FE <= maxIteration
-                [current_best, ~] = min(val_X);
-                curve(FE) = current_best;
+                [val_gBest, gBest] = track_best(val_X, X, val_gBest, gBest);
+                curve(FE) = val_gBest;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, X, val_X, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxIteration);
             end
             
             if FE >= maxIteration
@@ -119,7 +116,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             break;
         end
         
-        % ============ Learning-based onlooker bee phase ============
+        % Learning-based onlooker bee phase
         Fitness = calculateFitnessABC(val_X);
         prob = Fitness / sum(Fitness);
         cum_prob = cumsum(prob);
@@ -149,11 +146,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             
             % Record convergence curve and store history
             if FE <= maxIteration
-                [current_best, ~] = min(val_X);
-                curve(FE) = current_best;
+                [val_gBest, gBest] = track_best(val_X, X, val_gBest, gBest);
+                curve(FE) = val_gBest;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, X, val_X, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxIteration);
             end
             
             if FE >= maxIteration
@@ -165,7 +162,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             break;
         end
         
-        % ============ Generalized oppositional scout bee phase ============
+        % Generalized oppositional scout bee phase
         ind = find(trial == max(trial));
         ind = ind(1);
         
@@ -186,11 +183,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             for scout_idx = 1:2
                 eval_count = FE - 2 + scout_idx;
                 if eval_count <= maxIteration
-                    [current_best, ~] = min(val_X);
-                    curve(eval_count) = current_best;
+                    [val_gBest, gBest] = track_best(val_X, X, val_gBest, gBest);
+                    curve(eval_count) = val_gBest;
                     [population_history, fitness_history, history_index] = record_history(...
                         eval_count, X, val_X, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxIteration);
                 end
             end
         end
@@ -206,6 +203,15 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = val_gBest;
     best_solution = gBest;
 
+end
+
+% Running best over all evaluations; the scout phase can make min(val_X) rise
+function [vb, xb] = track_best(val_X, X, vb, xb)
+    [m, i] = min(val_X);
+    if m < vb
+        vb = m;
+        xb = X(i(1), :);
+    end
 end
 
 function r = generateR(popsize, i)

@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Turbulent Flow of Water-based Optimization (TFWO) for unconstrained benchmark problems
+% Turbulent Flow of Water-based Optimization (TFWO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nWh  = 3    % Number of whirlpools
@@ -19,13 +19,7 @@
 % Engineering Applications of Artificial Intelligence 92 (2020) 103666
 % https://doi.org/10.1016/j.engappai.2020.103666
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = tfwo(problem)
@@ -46,10 +40,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     curve = zeros(1, maxFE);
 
     % History storage (population = all whirlpool centres + objects = nPop)
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nPop, nVar);
-    fitness_history = zeros(history_size, nPop);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialization
@@ -63,7 +55,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = best_cost;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, P, C, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     % Main loop
@@ -85,7 +77,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_cost;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, P, C, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -94,7 +86,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = best_pos;
 end
 
-%% --- Initialization: build whirlpools and assign objects ---
+% Initialization: build whirlpools and assign objects
 function [Whirlpool, FE] = Initialize(problem, FE, nVar, VarMin, VarMax, nPop, nWh, nObW, nOb)
     Pos = rand(nPop, nVar) .* (VarMax - VarMin) + VarMin;
     [Cost, FE] = calculate_fitness(Pos', problem, FE);
@@ -135,7 +127,7 @@ function [Whirlpool, FE] = Initialize(problem, FE, nVar, VarMin, VarMax, nPop, n
     end
 end
 
-%% --- Gather all positions/costs into matrices ---
+% Gather all positions/costs into matrices
 function [P, C] = gather_population(Whirlpool, nPop, nVar)
     P = zeros(nPop, nVar);
     C = zeros(nPop, 1);
@@ -152,7 +144,7 @@ function [P, C] = gather_population(Whirlpool, nPop, nVar)
     end
 end
 
-%% --- Move the best object of each whirlpool to its centre (Pseudocode 6) ---
+% Move the best object of each whirlpool to its centre (Pseudocode 6)
 function Whirlpool = Pseudocode6(Whirlpool)
     for i = 1:numel(Whirlpool)
         cc = [Whirlpool(i).Objects.Cost];
@@ -167,7 +159,7 @@ function Whirlpool = Pseudocode6(Whirlpool)
     end
 end
 
-%% --- Effects of whirlpools on objects and on each other (Pseudocodes 1-5) ---
+% Effects of whirlpools on objects and on each other (Pseudocodes 1-5)
 function [Whirlpool, FE] = Effectsofwhirlpools(Whirlpool, problem, FE, nVar, VarMin, VarMax)
 
     for i = 1:numel(Whirlpool)

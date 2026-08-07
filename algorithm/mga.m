@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Material Generation Algorithm (MGA) for unconstrained benchmark problems
+% Material Generation Algorithm (MGA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NCompan = 100   % Number of "components" (population of materials)
@@ -16,20 +16,20 @@
 % Optimization of Engineering Problems,
 % Processes 9 (5) (2021) 859.
 % https://doi.org/10.3390/pr9050859
-%
-% Note: the original keeps a full BestSoFar history indexed by iteration; this
+% ----------------------------------------------------------------------- %
+% Implementation Note:
+% The original keeps a full BestSoFar history indexed by iteration; this
 % port tracks the best-so-far with scalars (identical values) to avoid
 % allocating a maxFe x dim array. The two "new component" generation lines and
 % their (reference-quirk) bound handling are reproduced verbatim, so exactly
 % one new material is evaluated per iteration as in the original.
+% The first generation line draws one component per dimension without repeats,
+% which randperm cannot satisfy once the dimension exceeds NCompan = 100; it
+% errors on the CEC2020RW problems at D = 118..158. Above that point the draw
+% falls back to sampling with replacement, the only way to fill D slots from a
+% pool of 100. Behaviour at D <= 100, i.e. every numeric CEC case, is unchanged.
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = mga(problem)
@@ -44,13 +44,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, NCompan, Var_Number);
-    fitness_history = zeros(history_size, NCompan);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    %% Create initial components
+    % Create initial components
     Compan.Position = unifrnd(repmat(VarMin, NCompan, 1), repmat(VarMax, NCompan, 1));
     [fit0, FE] = calculate_fitness(Compan.Position', problem, FE);
     Compan.Fun_Eval = fit0(:)';
@@ -63,12 +61,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     end
     [population_history, fitness_history, history_index] = record_block(...
         Compan.Position, Compan.Fun_Eval, 1, min(FE, maxFE), ...
-        population_history, fitness_history, history_index, sampling_interval, history_size);
+        population_history, fitness_history, history_index, maxFE);
 
-    %% Main loop (one new material evaluated per iteration)
+    % Main loop (one new material evaluated per iteration)
     while FE < maxFE
         % New component 1: mix a random component per dimension
-        Index = NCompan .* (0:Var_Number - 1) + randperm(NCompan, Var_Number);
+        Index = NCompan .* (0:Var_Number - 1) + pick_components(NCompan, Var_Number);
         CompnNew.Position(1, :) = Compan.Position(Index) + unifrnd(-1, 1) .* randn(1, Var_Number);
 
         % New component 2: weighted (sum-to-one) combination
@@ -109,7 +107,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(FE) = bestFitnessVal;
             [population_history, fitness_history, history_index] = record_history(...
                 FE, Compan.Position, Compan.Fun_Eval, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -119,12 +117,21 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = bestFitnessVal;
 end
 
-%% --- Record a fixed population snapshot over an FE block ---
-function [pop_hist, fit_hist, hist_idx] = record_block(pop, costs, fe_from, fe_to, pop_hist, fit_hist, hist_idx, sampling_interval, history_size)
+% One source component per dimension, distinct while the pool allows it
+function idx = pick_components(NCompan, Var_Number)
+    if Var_Number <= NCompan
+        idx = randperm(NCompan, Var_Number);
+    else
+        idx = randi(NCompan, 1, Var_Number);
+    end
+end
+
+% Record a fixed population snapshot over an FE block
+function [pop_hist, fit_hist, hist_idx] = record_block(pop, costs, fe_from, fe_to, pop_hist, fit_hist, hist_idx, maxFE)
     if fe_to < fe_from, return; end
     for eval_count = fe_from:fe_to
         [pop_hist, fit_hist, hist_idx] = record_history(...
             eval_count, pop, costs, pop_hist, fit_hist, hist_idx, ...
-            sampling_interval, history_size);
+            maxFE);
     end
 end

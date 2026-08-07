@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Beluga Whale Optimization (BWO) for unconstrained benchmark problems
+% Beluga Whale Optimization (BWO)
 % ----------------------------------------------------------------------- %
 % NOTE: This is Beluga Whale Optimization (Zhong et al., 2022), which shares
 % the "BWO" acronym with Black Widow Optimization (stored separately as bwoa).
@@ -19,13 +19,7 @@
 % Knowledge-Based Systems 251 (2022) 109215.
 % https://doi.org/10.1016/j.knosys.2022.109215
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = bwo(problem)
@@ -41,10 +35,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, Npop, nD);
-    fitness_history = zeros(history_size, Npop);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     fit = inf * ones(Npop, 1);
@@ -71,7 +63,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, pos, fit', population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -132,7 +124,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, pos, fit', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
@@ -162,7 +154,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = bsf;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, pos, fit', population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 if FE >= maxFE, break; end
             end

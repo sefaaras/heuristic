@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Nonlinear-based Chaotic Harris Hawks Optimizer (NCHHO) for unconstrained
-% benchmark problems
+% Nonlinear-based Chaotic Harris Hawks Optimizer (NCHHO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 100               % Population size (number of hawks)
@@ -11,13 +10,6 @@
 %     exploration) and a nonlinear control parameter (adjusting the
 %     exploration/exploitation balance)
 %
-% NOTE ON DIRECTION:
-%   The reference implementation is written for maximization
-%   (Rabbit_Energy = 0 and ">" comparisons). It has been converted here to
-%   minimization (Rabbit_Energy = inf and "<" comparisons, as in the
-%   canonical HHO) so that it is consistent with the CEC minimization
-%   benchmark suite. All update equations and parameters are unchanged.
-%
 % Reference:
 % Amin Abdollahi Dehkordi, Ali Safaa Sadiq, Seyedali Mirjalili,
 % Kayhan Zrar Ghafoor,
@@ -26,13 +18,16 @@
 % Applied Soft Computing 109 (2021) 107574
 % https://doi.org/10.1016/j.asoc.2021.107574
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% The reference implementation is written for maximization (Rabbit_Energy = 0
+% and ">" comparisons). It is converted here to minimization (Rabbit_Energy =
+% inf and "<" comparisons, as in the canonical HHO) so that it matches the CEC
+% minimization suite. All update equations and parameters are unchanged.
+% Evaluation goes through a helper that clamps to the box and returns the
+% clamped point, so the stored individual matches what was evaluated; the
+% reference bounds the population loop only, leaving the dive candidates raw.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = nchho(problem)
@@ -48,11 +43,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     T = maxFE / (N * 2.5);
@@ -69,6 +62,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     X = initialization(N, dim, ub, lb);
 
     fitness_all = inf(1, N);
+    % Positions fitness_all describes: the loop below can break on the budget,
+    % leaving the rest of X moved and unevaluated, so X alone is not that pair
+    X_snap = X;
     t = 0;
     while FE < maxFE
         FE_before = FE;
@@ -78,8 +74,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             FU = X(i, :) > ub; FL = X(i, :) < lb;
             X(i, :) = (X(i, :) .* (~(FU + FL))) + ub .* FU + lb .* FL;
             % fitness of locations
-            [fitness, FE, bf, bs] = fobj(X(i, :), problem, FE, bf, bs);
+            [fitness, FE, bf, bs, X(i, :)] = fobj(X(i, :), problem, FE, bf, bs);
             fitness_all(i) = fitness;
+            X_snap(i, :) = X(i, :);
             % Update the location of Rabbit (minimization)
             if fitness < Rabbit_Energy
                 Rabbit_Energy = fitness;
@@ -87,9 +84,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
             if FE >= maxFE, break; end
         end
-
-        % Consistent (position, fitness) snapshot for history
-        X_snap = X;
 
         E1 = abs(2 * (1 - (t / T)) - 2);   % factor showing the decreasing energy of rabbit
         a1 = 4;                            % chaotic map parameter
@@ -107,7 +101,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             Escaping_Energy = E1 * (E0);      % escaping energy of rabbit
 
             if abs(Escaping_Energy) >= 1
-                %% Exploration
+                % Exploration
                 q = rand();
                 rand_Hawk_index = floor(N * rand() + 1);
                 X_rand = X(rand_Hawk_index, :);
@@ -118,7 +112,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 end
 
             elseif abs(Escaping_Energy) < 1
-                %% Exploitation
+                % Exploitation
                 r = rand();   % probability of each event
 
                 if r >= 0.5 && abs(Escaping_Energy) < 0.5   % Hard besiege
@@ -130,18 +124,18 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     X(i, :) = (Rabbit_Location - X(i, :)) - Escaping_Energy * abs(Jump_strength * Rabbit_Location - X(i, :));
                 end
 
-                %% phase 2: team rapid dives (leapfrog movements)
+                % phase 2: team rapid dives (leapfrog movements)
                 if r < 0.5 && abs(Escaping_Energy) >= 0.5   % Soft besiege
                     w1 = 2 * exp(-(8 * t / T)^2);
                     Jump_strength = 2 * (1 - rand());
                     X1 = w1 * Rabbit_Location - Escaping_Energy * abs(Jump_strength * Rabbit_Location - X(i, :));
-                    [fX1, FE, bf, bs] = fobj(X1, problem, FE, bf, bs);
-                    [fXi, FE, bf, bs] = fobj(X(i, :), problem, FE, bf, bs);
+                    [fX1, FE, bf, bs, X1] = fobj(X1, problem, FE, bf, bs);
+                    [fXi, FE, bf, bs, X(i, :)] = fobj(X(i, :), problem, FE, bf, bs);
                     if fX1 < fXi
                         X(i, :) = X1;
                     else
                         X2 = w1 * Rabbit_Location - Escaping_Energy * abs(Jump_strength * Rabbit_Location - X(i, :)) + rand(1, dim) .* Levy(dim);
-                        [fX2, FE, bf, bs] = fobj(X2, problem, FE, bf, bs);
+                        [fX2, FE, bf, bs, X2] = fobj(X2, problem, FE, bf, bs);
                         if fX2 < fXi
                             X(i, :) = X2;
                         end
@@ -152,13 +146,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     w1 = 2 * exp(-(8 * t / T)^2);
                     Jump_strength = 2 * (1 - rand());
                     X1 = w1 * Rabbit_Location - Escaping_Energy * abs(Jump_strength * Rabbit_Location - mean(X));
-                    [fX1, FE, bf, bs] = fobj(X1, problem, FE, bf, bs);
-                    [fXi, FE, bf, bs] = fobj(X(i, :), problem, FE, bf, bs);
+                    [fX1, FE, bf, bs, X1] = fobj(X1, problem, FE, bf, bs);
+                    [fXi, FE, bf, bs, X(i, :)] = fobj(X(i, :), problem, FE, bf, bs);
                     if fX1 < fXi
                         X(i, :) = X1;
                     else
                         X2 = w1 * Rabbit_Location - Escaping_Energy * abs(Jump_strength * Rabbit_Location - mean(X)) + rand(1, dim) .* Levy(dim);
-                        [fX2, FE, bf, bs] = fobj(X2, problem, FE, bf, bs);
+                        [fX2, FE, bf, bs, X2] = fobj(X2, problem, FE, bf, bs);
                         if fX2 < fXi
                             X(i, :) = X2;
                         end
@@ -173,7 +167,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = bf;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, X_snap, fitness_all, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -185,8 +179,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Objective evaluation: threads FE and best-so-far ---
-function [z, FE, bf, bs] = fobj(pos, problem, FE, bf, bs)
+% Objective evaluation: clamps to the box, threads FE and best-so-far
+function [z, FE, bf, bs, pos] = fobj(pos, problem, FE, bf, bs)
+    pos = min(max(pos, problem.lb), problem.ub);
     [z, FE] = calculate_fitness(pos', problem, FE);
     if z < bf
         bf = z;
@@ -194,7 +189,7 @@ function [z, FE, bf, bs] = fobj(pos, problem, FE, bf, bs)
     end
 end
 
-%% --- Initialization ---
+% Initialization
 function [X] = initialization(N, dim, up, down)
     X = zeros(N, dim);
     for i = 1:dim
@@ -203,7 +198,7 @@ function [X] = initialization(N, dim, up, down)
     end
 end
 
-%% --- Levy Flight ---
+% Levy Flight
 function o = Levy(d)
     beta = 1.5;
     sigma = (gamma(1 + beta) * sin(pi * beta / 2) / (gamma((1 + beta) / 2) * beta * 2^((beta - 1) / 2)))^(1 / beta);

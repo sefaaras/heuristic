@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Light Spectrum Optimizer (LSO) for unconstrained benchmark problems
+% Light Spectrum Optimizer (LSO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NoF_LightRays = 25   % Population size (light rays)
@@ -17,8 +17,7 @@
 % Mathematics 2022, 10(19), 3466.
 % https://doi.org/10.3390/math10193466
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = lso(problem)
@@ -35,10 +34,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, NoF_LightRays, dim);
-    fitness_history = zeros(history_size, NoF_LightRays);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     LightRays = zeros(NoF_LightRays, dim);
@@ -57,7 +54,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = GBest_fitness;
             [population_history, fitness_history, history_index] = record_history(...
                 e, LightRays, fitness, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -103,11 +100,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = GBest_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, LightRays, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
 
-            % --- Scattering stages ---
+            % Scattering stages
             in1 = sort(fitness);
             F = abs((fitness(i) - GBest_fitness) / (GBest_fitness - (in1(NoF_LightRays)) + eps));
             if F < rand || rand < Ps
@@ -135,7 +132,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = GBest_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, LightRays, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
@@ -146,7 +143,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = GBestRayColor;
 end
 
-%% --- Bound handling: clamp with prob Ph, else random relocation ---
+% Bound handling: clamp with prob Ph, else random relocation
 function x = check_bounds(x, ub, lb, Ph)
     if rand < Ph
         U = x > ub; L = x < lb;

@@ -1,11 +1,11 @@
 % ----------------------------------------------------------------------- %
-% Cuckoo Search (CS) Algorithm for unconstrained benchmark problems
+% Cuckoo Search (CS)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   n = 25                  % Population size (number of nests)
 %   pa = 0.25               % Discovery rate of alien eggs/solutions
 %   beta = 1.5              % Levy flight parameter
-%   
+%
 % Algorithm Concept:
 %   - Inspired by brood parasitism of cuckoo birds
 %   - Cuckoos lay eggs in host bird nests
@@ -16,27 +16,21 @@
 %
 % Reference:
 % Yang, X.S. and Deb, S. (2009),
-% Cuckoo search via Lévy flights,
+% Cuckoo search via Levy flights,
 % World Congress on Nature & Biologically Inspired Computing (NaBIC),
 % IEEE, pp. 210-214.
 % https://doi.org/10.1109/NABIC.2009.5393690
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = cs(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % CS Parameters
     n = 25;                       % Population size (number of nests)
@@ -44,13 +38,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     beta = 1.5;                   % Levy flight parameter
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, n, dim);
-    fitness_history = zeros(history_size, n);
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Initialize nests
@@ -70,7 +62,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = best_fitness_current;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, nest, fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Precompute Levy flight sigma
@@ -109,7 +101,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness_current;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, nest, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -146,7 +138,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness_current;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, nest, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -157,7 +149,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -170,7 +162,7 @@ function X = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Get Cuckoos via Levy Flights ---
+% Get Cuckoos via Levy Flights
 function nest = get_cuckoos(nest, best, lb, ub, sigma, beta)
     n = size(nest, 1);
     for j = 1:n
@@ -187,7 +179,7 @@ function nest = get_cuckoos(nest, best, lb, ub, sigma, beta)
     end
 end
 
-%% --- Empty Nests (Discovery) ---
+% Empty Nests (Discovery)
 function new_nest = empty_nests(nest, lb, ub, pa)
     n = size(nest, 1);
     % Discovered or not -- a status vector
@@ -200,7 +192,7 @@ function new_nest = empty_nests(nest, lb, ub, pa)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function s = simplebounds(s, lb, ub)
     % Apply lower bound
     I = s < lb;

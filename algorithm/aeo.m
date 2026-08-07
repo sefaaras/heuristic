@@ -1,9 +1,9 @@
 % ----------------------------------------------------------------------- %
-% Artificial Ecosystem-based Optimization (AEO) for unconstrained benchmark problems
+% Artificial Ecosystem-based Optimization (AEO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nPop = 50                % Population size
-%   
+%
 % Algorithm Concept:
 %   - Inspired by energy flow in artificial ecosystems
 %   - Population sorted by fitness (worst to best)
@@ -15,39 +15,31 @@
 %
 % Reference:
 % Zhao, W., Wang, L., & Zhang, Z. (2020).
-% Artificial ecosystem-based optimization: a novel nature-inspired 
+% Artificial ecosystem-based optimization: a novel nature-inspired
 % meta-heuristic algorithm.
 % Neural Computing and Applications, 32(13), 9383-9425.
 % https://doi.org/10.1007/s00521-019-04452-x
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = aeo(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
-    nPop = 50;                    % Population size
+    nPop = 50;
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve - preallocate for maxFe elements
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, nPop, dim);  % Store population at sampled FEs
-    fitness_history = zeros(history_size, nPop);          % Store fitness values at sampled FEs
-    history_index = 1;                % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     % Initialize population
     PopPos = initialization(nPop, dim, ub, lb);
@@ -59,17 +51,17 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     [PopFit, indF] = sort(PopFit, 'descend');
     PopPos = PopPos(indF, :);
     
-    % Best solution is at the end (after descending sort)
-    BestF = PopFit(end);
-    BestX = PopPos(end, :);
-    
+    % Best point EVALUATED so far, updated at every evaluation
+    bsf = PopFit(end);
+    bsf_sol = PopPos(end, :);
+
     % Record best fitness for each initial evaluation and store population/fitness history
     for eval_count = 1:nPop
-        curve(eval_count) = BestF;
+        curve(eval_count) = bsf;
         % Store history with sampling
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, PopPos, PopFit, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % For equation (9) - determines whether to update in 1D or full dimension
@@ -83,15 +75,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         
         newPopPos = zeros(nPop, dim);
         
-        % ===== PRODUCTION PHASE =====
-        % Equation (1): Production operator - worst individual interacts with random solution
+        % Production phase, Eq. (1): the worst individual interacts with a random solution
         r1 = rand;
         a = (1 - Iteration / Max_iteration) * r1;
         xrand = rand(1, dim) .* (ub - lb) + lb;
         newPopPos(1, :) = (1 - a) * PopPos(nPop, :) + a * xrand;
         
-        % ===== CONSUMPTION PHASE =====
-        % Equation (6): Herbivore consumes producer (second individual)
+        % Consumption phase, Eq. (6): the herbivore consumes the producer
         u = randn(1, dim);
         v = randn(1, dim);
         C = 0.5 * u ./ abs(v);  % Equation (4): Levy-like coefficient
@@ -127,7 +117,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         
         % Evaluate new population after consumption phase
         [newPopFit, FE] = calculate_fitness(newPopPos', problem, FE);
-        
+        [mF, mI] = min(newPopFit);
+        if mF < bsf
+            bsf = mF; bsf_sol = newPopPos(mI, :);
+        end
+
         % Greedy selection: Update if new solution is better
         for i = 1:nPop
             if newPopFit(i) < PopFit(i)
@@ -140,10 +134,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         for eval_idx = 1:nPop
             eval_count = FE - nPop + eval_idx;
             if eval_count <= maxFE
-                curve(eval_count) = min(PopFit);
+                curve(eval_count) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, PopPos, PopFit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -152,8 +146,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             break;
         end
         
-        % ===== DECOMPOSITION PHASE =====
-        % Find current best individual
+        % Decomposition phase: search around the current best individual
         [~, indOne] = min(PopFit);
         
         % Equation (9): Decomposition - search around the best solution
@@ -171,7 +164,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         
         % Evaluate new population after decomposition phase
         [newPopFit, FE] = calculate_fitness(newPopPos', problem, FE);
-        
+        [mF, mI] = min(newPopFit);
+        if mF < bsf
+            bsf = mF; bsf_sol = newPopPos(mI, :);
+        end
+
         % Greedy selection: Update if new solution is better
         for i = 1:nPop
             if newPopFit(i) < PopFit(i)
@@ -184,10 +181,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         for eval_idx = 1:nPop
             eval_count = FE - nPop + eval_idx;
             if eval_count <= maxFE
-                curve(eval_count) = min(PopFit);
+                curve(eval_count) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, PopPos, PopFit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -195,22 +192,18 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         [PopFit, indF] = sort(PopFit, 'descend');
         PopPos = PopPos(indF, :);
         
-        % Update global best
-        if PopFit(end) < BestF
-            BestF = PopFit(end);
-            BestX = PopPos(end, :);
-        end
-        
         Iteration = Iteration + 1;
     end
     
+    curve(min(max(FE, 1), maxFE):end) = bsf;
+
     % Return best solution
-    best_fitness = BestF;
-    best_solution = BestX;
+    best_fitness = bsf;
+    best_solution = bsf_sol;
     
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function Positions = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);  % Number of boundaries
     
@@ -229,7 +222,7 @@ function Positions = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

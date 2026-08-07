@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Dynamic Arithmetic Optimization Algorithm (DAOA) for benchmark problems
+% Dynamic Arithmetic Optimization Algorithm (DAOA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N     = 5      % Population size
@@ -19,8 +19,7 @@
 % IEEE Access, vol. 10, pp. 16188-16208, 2022.
 % https://doi.org/10.1109/ACCESS.2022.3146374
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = daoa(problem)
@@ -38,10 +37,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, Dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     X = initialization(N, Dim, UB, LB);
@@ -56,7 +53,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = Best_FF;
             [population_history, fitness_history, history_index] = record_history(...
                 e, X, Ffun, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -92,7 +89,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = Best_FF;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, X, Ffun, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 
@@ -105,7 +102,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Best_P;
 end
 
-%% --- Initialization ---
+% Initialization
 function X = initialization(N, Dim, UB, LB)
     B_no = size(UB, 2);
     if B_no == 1
@@ -118,7 +115,7 @@ function X = initialization(N, Dim, UB, LB)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

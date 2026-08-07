@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Social Network Search (SNS) for unconstrained benchmark problems
+% Social Network Search (SNS)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   nUser = 50            % Population size (number of network users)
@@ -15,13 +15,7 @@
 % Computational Intelligence and Neuroscience 2021 (2021) 8548639
 % https://doi.org/10.1155/2021/8548639
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = sns(problem)
@@ -37,11 +31,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nUser, nDim);
-    fitness_history = zeros(history_size, nUser);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Level 1: Initializing
@@ -59,7 +51,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = fBest;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, x, f, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -122,7 +114,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = fBest;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, x, f, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end

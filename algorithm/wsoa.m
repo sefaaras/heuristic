@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% War Strategy Optimization (WSO/WSOA) for benchmark problems
+% War Strategy Optimization (WSO/WSOA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   Soldiers_no = 30   % Population size (soldiers)
@@ -17,8 +17,7 @@
 % IEEE Access, vol. 10, pp. 25073-25105, 2022.
 % https://doi.org/10.1109/ACCESS.2022.3153493
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = wsoa(problem)
@@ -35,10 +34,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, Soldiers_no, dim);
-    fitness_history = zeros(history_size, Soldiers_no);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Positions = initialization(Soldiers_no, dim, ub, lb);
@@ -56,7 +53,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = King_fit;
             [population_history, fitness_history, history_index] = record_history(...
                 e, Positions, fitness_old, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -97,7 +94,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = King_fit;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, Positions, fitness_old, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
@@ -116,7 +113,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = best_pos;
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -129,7 +126,7 @@ function Positions = initialization(N, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

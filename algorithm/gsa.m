@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Gravitational Search Algorithm (GSA) for unconstrained benchmark problems
+% Gravitational Search Algorithm (GSA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 50                  % Population size (number of agents)
@@ -18,25 +18,19 @@
 % Reference:
 % Esmat Rashedi, Hossein Nezamabadi-pour, Saeid Saryazdi,
 % GSA: A Gravitational Search Algorithm,
-% Information Sciences 179 (2009) 2232–2248
+% Information Sciences 179 (2009) 2232-2248
 % https://doi.org/10.1016/j.ins.2009.03.004
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = gsa(problem)
 
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    low = problem.lb;              % Lower bounds
-    up = problem.ub;               % Upper bounds
-    maxIteration = problem.maxFe;  % Maximum function evaluations
+    dim = problem.dimension;
+    low = problem.lb;
+    up = problem.ub;
+    maxIteration = problem.maxFe;
     
     N = 50;                        % Population size
     ElitistCheck = 1;              % Use elitist strategy
@@ -44,14 +38,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     Rnorm = 2;                     % Norm type for distance calculation
     
     FE = 0;                        % Function Evaluation Counter
-    curve = zeros(1, maxIteration); % Convergence curve
+    curve = zeros(1, maxIteration);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;           % Fixed history size
-    sampling_interval = max(1, floor(maxIteration / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, N, dim);     % Store population at sampled FEs
-    fitness_history = zeros(history_size, N);             % Store fitness values at sampled FEs
-    history_index = 1;              % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     % Random initialization for agents
     X = initialization(dim, N, up, low); 
@@ -85,7 +77,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, X, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxIteration);
             end
         end
         
@@ -130,8 +122,7 @@ end
     end
     
     function [M]=massCalculation(fit)
-        %%%%here, make your own function of 'mass calculation'
-        % Ensure fit is a column vector
+        % Forced to a column so the min/max below are scalars
         fit = fit(:);
         
         Fmax=max(fit); Fmin=min(fit); 
@@ -146,7 +137,7 @@ end
     end
     
     function G=Gconstant(iteration,max_it)
-    %%%here, make your own function of 'G'
+    % here, make your own function of 'G'
       alfa=20;G0=100;
       G=G0*exp(-alfa*iteration/max_it); %eq. 28.
     end
@@ -156,7 +147,7 @@ end
         [N,dim]=size(X);
          final_per=2; %In the last iteration, only 2 percent of agents apply force to the others.
     
-        %%%%total force calculation
+        % total force calculation
          if ElitistCheck==1
              kbest=final_per+(1-iteration/max_it)*(100-final_per); %kbest in eq. 21.
              kbest=round(N*kbest/100);
@@ -181,7 +172,7 @@ end
                  end
              end
          end
-        %%acceleration
+        % acceleration
         a=E.*G; %note that Mp(i)/Mi(i)=1
     end
     

@@ -1,11 +1,10 @@
 % ----------------------------------------------------------------------- %
-% EBO with CMAR (Ensemble Butterfly Optimization with CMA-ES Restart)
-% for unconstrained benchmark problems
+% Ensemble Butterfly Optimization with CMA-ES Restart (EBO with CMAR)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   PS1 = 18*n              % Population size for EBO phase
 %   PS2 = 4+floor(3*log(n)) % Population size for CMA-ES phase
-%   
+%
 % Algorithm Concept:
 %   - Hybrid algorithm combining two phases:
 %     1. EBO (Ensemble Butterfly Optimization): DE-based with adaptive operators
@@ -17,48 +16,50 @@
 %
 % Reference:
 % Kumar, A., Misra, R. K., & Singh, D. (2017).
-% Improving the local search capability of effective butterfly optimizer 
+% Improving the local search capability of effective butterfly optimizer
 % using covariance matrix adapted retreat phase.
 % IEEE Congress on Evolutionary Computation (CEC), 2017, pp. 1835-1842
 % https://doi.org/10.1109/CEC.2017.7969524
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% LS2 calls fmincon (Optimization Toolbox) with an sqp inner solver, so this
+% algorithm needs it; the call is wrapped in try/catch and a failure keeps the
+% incumbent, as does a non-finite start point. Neither guard is in the
+% reference, and without the toolbox the run silently does no local search.
+% FE accounting: the start-point probe costs one evaluation and fmincon's own
+% calls are charged through details.funcCount, so it competes for maxFe.
+% Par.Gmax is the reference's hardcoded CEC2017 table (2163, 2745, 3022 for
+% D = 10, 30, 50), falling back to 3401 at any other dimension.
+% CMA-ES samples are repaired every generation; the reference leaves them raw
+% until half the budget is spent and evaluates them outside the box.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = ebocmar(problem)
 
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
     % Initialize parameters
     Par = Introd_Par(dim, lb, ub, maxFE);
     
-    %% Define variables
+    % Define variables
     PS1 = Par.PopSize;            % Population size for EBO
     PS2 = 4 + floor(3*log(Par.n));  % Population size for CMA-ES
     Par.PopSize = PS1 + PS2;        % Total population size
     
-    % For history recording (store only top 100 individuals to save disk space)
-    history_pop_size = 100;
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, history_pop_size, dim);
-    fitness_history = zeros(history_size, history_pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
-    %% Initialize population
+    % Initialize population
     x = repmat(Par.xmin, Par.PopSize, 1) + repmat((Par.xmax - Par.xmin), Par.PopSize, 1) .* rand(Par.PopSize, Par.n);
     
     % Evaluate initial population
@@ -72,22 +73,15 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     [bestold, bes_l] = min(fitx);
     bestx = x(bes_l, :);
     
+    % All PS1 + PS2 individuals were evaluated here, so record the whole initial population
     for eval_count = 1:Par.PopSize
         curve(eval_count) = bestold;
-        if eval_count <= PS1
-            [sorted_fit, sorted_idx] = sort(fitx(1:PS1));
-            top_k = min(history_pop_size, PS1);
-            rec_pop = NaN(history_pop_size, dim);
-            rec_fit = NaN(1, history_pop_size);
-            rec_pop(1:top_k, :) = x(sorted_idx(1:top_k), :);
-            rec_fit(1:top_k) = sorted_fit(1:top_k);
-            [population_history, fitness_history, history_index] = record_history(...
-                eval_count, rec_pop, rec_fit, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
-        end
+        [population_history, fitness_history, history_index] = record_history(...
+            eval_count, x, fitx, population_history, fitness_history, ...
+            history_index, maxFE);
     end
     
-    %% Split population for each phase
+    % Split population for each phase
     EA_1 = x(1:PS1, :);    
     EA_obj1 = fitx(1:PS1);   
     EA_1old = x(randperm(PS1), :);
@@ -95,21 +89,21 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     EA_2 = x(PS1+1:size(x,1), :);    
     EA_obj2 = fitx(PS1+1:size(x,1));
     
-    %% Initialize CMA-ES parameters
+    % Initialize CMA-ES parameters
     setting = [];
     [setting] = init_cma_par(setting, EA_2, Par.n, PS2);
     
-    %% Probability of each operator
+    % Probability of each operator
     probDE1 = 1./Par.n_opr .* ones(1, Par.n_opr);
     probSC = 1./Par.n_opr .* ones(1, Par.n_opr);
     
-    %% Archive data
+    % Archive data
     arch_rate = 2.6;
     archive.NP = round(arch_rate * PS1);  % must stay integer: it indexes rndpos(1:archive.NP)
     archive.pop = zeros(0, Par.n);
     archive.funvalues = zeros(0, 1);
     
-    %% Memory for adaptive CR and F
+    % Memory for adaptive CR and F
     hist_pos = 1;
     memory_size = 6;
     archive_f = ones(1, memory_size) .* 0.7;
@@ -126,7 +120,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     bnd = []; 
     fitness = [];
     
-    %% Main loop
+    % Main loop
     while stop_con == 0
         iter = iter + 1;
         cy = cy + 1;
@@ -182,7 +176,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             Probs = ones(1, 2);
         end
         
-        %% EBO Phase
+        % EBO Phase
         if FE < Par.Max_FES
             if rand < Probs(1)
                 % Linear reduction of population size
@@ -214,30 +208,33 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     EBO(EA_1, EA_1old, EA_obj1, probDE1, bestold, bestx, archive, hist_pos, memory_size, ...
                     archive_f, archive_Cr, archive_T, archive_freq, Par.xmin, Par.xmax, Par.n, PS1, ...
                     FE, problem, curve, Par.Max_FES, Par.Gmax, iter, ...
-                    population_history, fitness_history, history_index, sampling_interval, history_size, history_pop_size);
+                    population_history, fitness_history, history_index);
             end
         end
         
-        %% Scout/CMAR Phase
+        % Scout/CMAR Phase
         if FE < Par.Max_FES
             if rand < Probs(2)
                 [EA_2, EA_obj2, setting, bestold, bestx, bnd, fitness, FE, curve, ...
                     population_history, fitness_history, history_index] = ...
                     Scout(EA_2, EA_obj2, probSC, setting, iter, bestold, bestx, fitness, bnd, ...
                     Par.xmin, Par.xmax, Par.n, PS2, FE, problem, curve, Par.Max_FES, ...
-                    EA_1, EA_obj1, PS1, population_history, fitness_history, history_index, sampling_interval, history_size, history_pop_size);
+                    population_history, fitness_history, history_index);
             end
         end
         
-        %% Local Search (LS2)
+        % Local Search (LS2)
         if FE > 0.75 * Par.Max_FES
             if rand < Par.prob_ls
                 old_fit_eva = FE;
                 [bestx, bestold, FE, succ] = LS2(bestx, bestold, Par, FE, problem, Par.Max_FES, Par.xmin, Par.xmax);
                 
-                % Record curve for LS evaluations
+                % LS2 is single-point, so record EA_1 (the held population) before LS2 writes its result back
                 for ls_eval = old_fit_eva+1:min(FE, maxFE)
                     curve(ls_eval) = bestold;
+                    [population_history, fitness_history, history_index] = record_history(...
+                        ls_eval, EA_1, EA_obj1, population_history, fitness_history, ...
+                        history_index, maxFE);
                 end
                 
                 if succ == 1
@@ -257,7 +254,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
         
-        %% Stopping criterion
+        % Stopping criterion
         if FE >= Par.Max_FES
             stop_con = 1;
         end
@@ -268,14 +265,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = bestold;
 end
 
-%% ==================== EBO Function ====================
+% EBO Function
 function [x, xold, fitx, prob, bestold, bestx, archive, hist_pos, memory_size, ...
     archive_f, archive_Cr, archive_T, archive_freq, FE, curve, ...
     population_history, fitness_history, history_index] = ...
     EBO(x, xold, fitx, prob, bestold, bestx, archive, hist_pos, memory_size, ...
     archive_f, archive_Cr, archive_T, archive_freq, xmin, xmax, n, PopSize, ...
     FE, problem, curve, Max_FES, G_Max, gg, ...
-    population_history, fitness_history, history_index, sampling_interval, history_size, history_pop_size)
+    population_history, fitness_history, history_index)
 
     vi = zeros(PopSize, n);
     
@@ -379,25 +376,18 @@ function [x, xold, fitx, prob, bestold, bestx, archive, hist_pos, memory_size, .
     [fitx_new, FE] = calculate_fitness(ui', problem, FE);
     fitx_new = fitx_new(:)';  % Ensure row vector (1 x PopSize)
     
-    % Record curve with top individuals for history
+    % Record curve and population metrics for history
     for eval_idx = 1:PopSize
         eval_count = FE - PopSize + eval_idx;
         if eval_count <= Max_FES
             curve(eval_count) = bestold;
-            [sorted_fit, sorted_idx] = sort(fitx);
-            top_k = min(history_pop_size, PopSize);
-            rec_pop = NaN(history_pop_size, n);
-            rec_fit = NaN(1, history_pop_size);
-            rec_pop(1:top_k, :) = x(sorted_idx(1:top_k), :);
-            rec_fit(1:top_k) = sorted_fit(1:top_k);
             [population_history, fitness_history, history_index] = record_history(...
-                eval_count, rec_pop, rec_fit, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                eval_count, x, fitx, population_history, fitness_history, ...
+                history_index, Max_FES);
         end
     end
     
-    % Calculate improvement for Cr and F
-    % Ensure fitx and fitx_new are same orientation (row vectors)
+    % Cr/F improvement weights; both fitness vectors forced to rows first
     fitx = fitx(:)';
     fitx_new = fitx_new(:)';
     diff = abs(fitx - fitx_new);
@@ -481,12 +471,12 @@ function [x, xold, fitx, prob, bestold, bestx, archive, hist_pos, memory_size, .
     end
 end
 
-%% ==================== Scout Function ====================
+% Scout Function
 function [x, fitx, setting, bestold, bestx, bnd, fitness, FE, curve, ...
     population_history, fitness_history, history_index] = ...
     Scout(x, ~, prob, setting, iter, bestold, bestx, fitness, bnd, ...
     xmin, xmax, n, PopSize, FE, problem, curve, Max_FES, ...
-    EA_1, EA_obj1, PS1, population_history, fitness_history, history_index, sampling_interval, history_size, history_pop_size)
+    population_history, fitness_history, history_index)
 
     fitness.raw = NaN(1, PopSize);
     
@@ -497,33 +487,28 @@ function [x, fitx, setting, bestold, bestx, bnd, fitness, FE, curve, ...
     end
     arx = repmat(setting.xmean, 1, PopSize) + setting.sigma * (setting.BD * arz);
     
+    % hb = 1 before the halfway point, hb = 2 after, but always repaired
     handle_limit = 0.5;
     if FE >= handle_limit*Max_FES
         arxvalid = han_boun(arx', xmax, xmin, x, PopSize, 2);
-        arxvalid = arxvalid';
     else
-        arxvalid = arx;
+        arxvalid = han_boun(arx', xmax, xmin, x, PopSize, 1);
     end
+    arxvalid = arxvalid';
     
     % Evaluate
     [fitness.raw, FE] = calculate_fitness(arxvalid, problem, FE);
     fitness.raw = fitness.raw(:)';  % Keep Scout fitness values in the row-vector convention used by EBO.
     
-    % Record curve with top individuals from EA_1 for history
+    % These FEs went to arxvalid, the incoming EA_2, so that is the population recorded here
     for eval_idx = 1:PopSize
         eval_count = FE - PopSize + eval_idx;
         if eval_count <= Max_FES
             curve(eval_count) = bestold;
-            currentPS1 = min(PS1, size(EA_1, 1));
-            [sorted_fit, sorted_idx] = sort(EA_obj1(1:currentPS1));
-            top_k = min(history_pop_size, currentPS1);
-            rec_pop = NaN(history_pop_size, n);
-            rec_fit = NaN(1, history_pop_size);
-            rec_pop(1:top_k, :) = EA_1(sorted_idx(1:top_k), :);
-            rec_fit(1:top_k) = sorted_fit(1:top_k);
             [population_history, fitness_history, history_index] = record_history(...
-                eval_count, rec_pop, rec_fit, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                eval_count, arxvalid', fitness.raw, ...
+                population_history, fitness_history, ...
+                history_index, Max_FES);
         end
     end
     
@@ -619,7 +604,7 @@ function [x, fitx, setting, bestold, bestx, bnd, fitness, FE, curve, ...
     fitx = fitness.raw;
 end
 
-%% ==================== Helper Functions ====================
+% Helper Functions
 
 function [r1, r2, r3] = gnR1R2(NP1, NP2, r0)
     NP0 = length(r0);
@@ -792,7 +777,7 @@ function [x, f, FE, succ] = LS2(bestx, f, Par, FE, problem, Max_FES, xmin, xmax)
     % Create wrapper function for fmincon
     objfun = @(x_in) evaluate_for_ls(x_in, problem);
 
-    % Default: keep the incumbent. fmincon throws
+    % Default: keep the incumbent if fmincon errors or the start point is not finite
     x = bestx;
     succ = 0;
 

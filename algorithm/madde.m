@@ -1,9 +1,8 @@
 % ----------------------------------------------------------------------- %
-% MadDE (Multiple Adaptation based Differential Evolution)
-% for unconstrained benchmark problems
+% Multiple Adaptation based Differential Evolution (MadDE)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
-%   pop_size    = 2 * D^2       % Initial population size
+%   pop_size    = min(2*D^2, 40*D)  % Initial population, capped above D = 20
 %   memory_size = 10 * D        % Success-history memory size
 %   p_best_rate = 0.18, arc_rate = 2.3, q_cr_rate = 0.01
 %
@@ -21,13 +20,20 @@
 % 2021, pp. 832-840.
 % https://doi.org/10.1109/CEC45853.2021.9504792
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% pop_size is capped at 40*D. The reference's 2*D^2 was tuned on CEC2021, which
+% runs D = 10 and 20 only, and the two laws meet exactly at D = 20, so every
+% dimension the authors tested is untouched and only the extrapolation above it
+% changes. Uncapped, 2*D^2 reaches 49928 at D = 158 (CEC2020RW) and leaves 20
+% generations of the 1e6 budget, so the linear population reduction the
+% algorithm is built around never runs. 40*D is the top of the linear band its
+% own family uses (L-SHADE 18*D, NL-SHADE-RSP 30*D, AGSK 40*D).
+%     D       2*D^2     40*D
+%     20        800      800
+%     100     20000     4000
+%     158     49928     6320
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = madde(problem)
@@ -39,26 +45,23 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     max_nfes = problem.maxFe;
     lu = [lb; ub];
 
-    %% Hyper-parameters
+    % Hyper-parameters
     q_cr_rate = 0.01;
     p_best_rate = 0.18;
     arc_rate = 2.3;
     memory_size = 10 * problem_size;
-    pop_size = 2 * problem_size ^ 2;
+    pop_size = min(2 * problem_size ^ 2, 40 * problem_size);
 
     max_pop_size = pop_size;
     min_pop_size = 4.0;
 
     FE = 0;
     curve = zeros(1, max_nfes);
-    history_pop_size = 100;
-    history_size = 10000;
-    sampling_interval = max(1, floor(max_nfes / history_size));
-    population_history = zeros(history_size, history_pop_size, problem_size);
-    fitness_history = zeros(history_size, history_pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
-    %% Initialize the main population (Sobol sequence)
+    % Initialize the main population (Sobol sequence)
     p = sobolset(problem_size, 'Skip', 1e4, 'Leap', 1e3);
     p = scramble(p, 'MatousekAffineOwen');
     rand0 = net(p, pop_size);
@@ -79,12 +82,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         if i <= max_nfes
             curve(i) = bsf_fit_var;
             [population_history, fitness_history, history_index] = record_top_k(...
-                i, pop, fitness', history_pop_size, problem_size, ...
-                population_history, fitness_history, history_index, sampling_interval, history_size);
+                i, pop, fitness', ...
+                population_history, fitness_history, history_index, max_nfes);
         end
     end
 
-    %% Probabilities of DE operators
+    % Probabilities of DE operators
     num_de = 3;
     count_S = zeros(1, num_de);
     probDE = 1 ./ num_de .* ones(1, num_de);
@@ -97,7 +100,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     archive.pop = zeros(0, problem_size);
     archive.funvalues = zeros(0, 1);
 
-    %% Main loop
+    % Main loop
     while FE < max_nfes
         pop = popold;
         [fitness, sorted_index] = sort(fitness, 'ascend');
@@ -198,8 +201,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if eval_count >= 1 && eval_count <= max_nfes
                 curve(eval_count) = bsf_fit_var;
                 [population_history, fitness_history, history_index] = record_top_k(...
-                    eval_count, pop, fitness', history_pop_size, problem_size, ...
-                    population_history, fitness_history, history_index, sampling_interval, history_size);
+                    eval_count, pop, fitness', ...
+                    population_history, fitness_history, history_index, max_nfes);
             end
         end
 
@@ -286,22 +289,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = bsf_fit_var;
 end
 
-%% --- Helper functions ---
-function [pop_hist, fit_hist, hist_idx] = record_top_k(current_fe, population, fitness, history_pop_size, dim, pop_hist, fit_hist, hist_idx, sampling_interval, history_size)
-    if mod(current_fe, sampling_interval) == 0 || hist_idx <= history_size
-        if hist_idx <= history_size
-            current_size = size(population, 1);
-            [sorted_fit, sorted_idx] = sort(fitness);
-            top_k = min(history_pop_size, current_size);
-            rec_pop = NaN(history_pop_size, dim);
-            rec_fit = NaN(1, history_pop_size);
-            rec_pop(1:top_k, :) = population(sorted_idx(1:top_k), :);
-            rec_fit(1:top_k) = sorted_fit(1:top_k);
-            pop_hist(hist_idx, :, :) = rec_pop;
-            fit_hist(hist_idx, :) = rec_fit;
-            hist_idx = hist_idx + 1;
-        end
-    end
+% Helper functions
+function [pop_hist, fit_hist, hist_idx] = record_top_k(current_fe, population, fitness, pop_hist, fit_hist, hist_idx, maxFE)
+% Kept for existing call sites; record_history stores population metrics, not raw positions
+    [pop_hist, fit_hist, hist_idx] = record_history(current_fe, population, fitness, ...
+        pop_hist, fit_hist, hist_idx, maxFE);
 end
 
 function [r1, r2, r3] = gnR1R2(NP1, NP2, r0)

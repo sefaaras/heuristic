@@ -1,8 +1,15 @@
 % ----------------------------------------------------------------------- %
-% APGSK-IMODE  (Adaptive-Parameter Gaining-Sharing Knowledge hybridized
-% with Improved Multi-Operator Differential Evolution)
-% for unconstrained benchmark problems
+% Adaptive-Parameter GSK hybridized with IMODE (APGSK-IMODE)
+% CEC 2021 competition entry
 % ----------------------------------------------------------------------- %
+% Algorithm Parameters:
+%   NP  = 30*D          % Total population, split PS2 = round(NP/4) for APGSK
+%   CS  = 50            % Cycle length between sub-population exchanges
+%   n_opr = 3           % IMODE mutation operators
+%   memory_size = 15*D  % IMODE historical memory for F and CR
+%   arch_rate = 1.4     % IMODE archive size as a multiple of PS1
+%   KF_pool = [0.1 1.0 0.5 1.0], KR_pool = [0.2 0.1 0.9 0.9]   % APGSK pools
+%
 % Algorithm Concept:
 %   - Two co-evolving sub-populations: EA_1 driven by IMODE (3 DE operators,
 %     linear population reduction, archive) and EA_2 driven by APGSK
@@ -23,20 +30,15 @@
 %   GSK/APGSK - A. W. Mohamed et al., "Gaining-sharing knowledge based
 %     algorithm...," Int. J. Mach. Learn. Cybern. 11 (2020) 1501-1529.
 %     https://doi.org/10.1007/s13042-019-01053-x
-%
-% Note: reference hardcodes the [-100,100] CEC box and a length-10 optima
+% ----------------------------------------------------------------------- %
+% Implementation Note:
+% Reference hardcodes the [-100,100] CEC box and a length-10 optima
 % array; here the bounds are generalized to the actual problem bounds
 % (identical on the CEC suites), f_optimal is set to -inf (disables the
 % optimum-based early stop, since optima are unknown/nonzero here), and the
 % EA_2 split uses round(NP/4) so it stays integer for every dimension.
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = apgsk_imode(problem)
@@ -56,11 +58,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, max_nfes);
-    history_pop_size = 100;
-    history_size = 10000;
-    sampling_interval = max(1, floor(max_nfes / history_size));
-    population_history = zeros(history_size, history_pop_size, D);
-    fitness_history = zeros(history_size, history_pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Pop = repmat(lu(1, :), NP, 1) + rand(NP, D) .* (repmat(lu(2, :) - lu(1, :), NP, 1));
@@ -72,9 +71,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     max_NP1 = PS1;
     max_NP2 = PS2;
 
-    %% IMODE sub-population
+    % IMODE sub-population
     EA_1 = Pop(1:PS1, :); EA_obj1 = Fit(1:PS1);
-    %% APGSK sub-population
+    % APGSK sub-population
     EA_2 = Pop(PS1 + 1:size(Pop, 1), :); EA_obj2 = Fit(PS1 + 1:size(Pop, 1));
 
     arch_rate = 1.4;
@@ -98,7 +97,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     [curve, population_history, fitness_history, history_index] = rec_block(...
         Pop, Fit, 1, FE, bsf, curve, population_history, fitness_history, ...
-        history_index, sampling_interval, history_size, max_nfes, history_pop_size);
+        history_index, max_nfes);
 
     Probs = [1 1];
     it = 0;
@@ -152,7 +151,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if bestold < bsf, bsf = bestold; bsf_sol = bestx; end
             [curve, population_history, fitness_history, history_index] = rec_block(...
                 EA_1, EA_obj1, ev0 + 1, FE, bsf, curve, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size, max_nfes, history_pop_size);
+                history_index, max_nfes);
 
             if FE >= max_nfes
                 stop_con = 1;
@@ -190,7 +189,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if m2 < bsf, bsf = m2; bsf_sol = EA_2(i2, :); end
             [curve, population_history, fitness_history, history_index] = rec_block(...
                 EA_2, EA_obj2, ev0 + 1, FE, bsf, curve, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size, max_nfes, history_pop_size);
+                history_index, max_nfes);
 
             if FE >= max_nfes
                 stop_con = 1;
@@ -226,25 +225,19 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = bsf;
 end
 
-%% --- Record best-so-far curve + top-k history over an FE block ---
-function [curve, ph, fh, hidx] = rec_block(pop, costs, fe_from, fe_to, bestval, curve, ph, fh, hidx, si, hs, maxFE, hps)
+% Record best-so-far curve + top-k history over an FE block
+function [curve, ph, fh, hidx] = rec_block(pop, costs, fe_from, fe_to, bestval, curve, ph, fh, hidx, maxFE)
     fe_to = min(fe_to, maxFE);
     if fe_from < 1, fe_from = 1; end
     if fe_to < fe_from, return; end
-    dim = size(pop, 2);
     costs = costs(:)';
-    [sf, sidx] = sort(costs);
-    tk = min(hps, numel(costs));
-    rp = NaN(hps, dim); rf = NaN(1, hps);
-    rp(1:tk, :) = pop(sidx(1:tk), :);
-    rf(1:tk) = sf(1:tk);
     for ec = fe_from:fe_to
         curve(ec) = bestval;
-        [ph, fh, hidx] = record_history(ec, rp, rf, ph, fh, hidx, si, hs);
+        [ph, fh, hidx] = record_history(ec, pop, costs, ph, fh, hidx, maxFE);
     end
 end
 
-%% --- Parameters ---
+% Parameters
 function [Par] = Introd_Par(n, maxfes, lb, ub)
     Par.n_opr = 3;
     Par.n = n;
@@ -270,14 +263,12 @@ function [Par] = Introd_Par(n, maxfes, lb, ub)
 
     Par.All_Imp = zeros(1, 4);
     Par.K = K;
-    % Initialised to the same weights the early-budget branch of APGSK_fun
-    % would set; guards against an empty KW_ind if APGSK first runs after
-    % 10% of the budget (e.g. with very small maxFe).
+    % Same weights APGSK_fun sets early on, so KW_ind is never empty on a very small maxFe
     Par.KW_ind = [0.85 0.05 0.05 0.05];
     Par.Printing = 0;
 end
 
-%% --- IMODE stage ---
+% IMODE stage
 function [x, xold, fitx, prob, bestold, bestx, archive, hist_pos, memory_size, archive_f, archive_Cr, archive_T, archive_freq, current_eval, F, cr] = ...
     IMODE(x, xold, fitx, prob, bestold, bestx, archive, hist_pos, memory_size, archive_f, archive_Cr, archive_T, archive_freq, xmin, xmax, n, ...
     PopSize, current_eval, Max_FES, G_Max, F, cr, problem, lb, ub) %#ok<INUSD>
@@ -409,7 +400,7 @@ function [x, xold, fitx, prob, bestold, bestx, archive, hist_pos, memory_size, a
     end
 end
 
-%% --- APGSK stage ---
+% APGSK stage
 function [pop, fitness, Par, nfes] = APGSK_fun(pop, fitness, lu, Par, nfes, problem)
 
     [pop_size, problem_size] = size(pop);
@@ -527,7 +518,7 @@ function [pop, fitness, Par, nfes] = APGSK_fun(pop, fitness, lu, Par, nfes, prob
     Par.KW_ind = KW_ind;
 end
 
-%% --- Gaining-Sharing R indices ---
+% Gaining-Sharing R indices
 function [R1, R2, R3] = Gained_Shared_Senior_R1R2R3(indBest)
     pop_size = length(indBest);
     R1 = indBest(1:round(pop_size * 0.1));

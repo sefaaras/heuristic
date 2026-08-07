@@ -1,48 +1,49 @@
 % ----------------------------------------------------------------------- %
-% Backtracking Search Optimization Algorithm (BSA) for unconstrained 
-% benchmark problems
+% Backtracking Search Optimization Algorithm (BSA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   popsize = 30        % Population size
 %   DIM_RATE = 1        % Dimension rate for crossover map
 %   F = 3*randn         % Scale factor (mutation strength)
 %
+% Algorithm Concept:
+%   - A second "historical" population is carried as swarm memory and is
+%     overwritten by the current one only when rand < rand
+%   - The memory is reshuffled every generation, so the difference vector
+%     pairs each individual with an arbitrary past member, not its own ancestor
+%   - Mutation and crossover are one step: pop + (map.*F).*(historical - pop)
+%   - The binary map is drawn per generation from two strategies: a random
+%     subset of coordinates, or exactly one coordinate
+%   - Greedy one-to-one selection of each offspring against its parent
+%
 % Reference:
-% P. Civicioglu, 
-% Backtracking Search Optimization Algorithm for numerical optimization 
+% P. Civicioglu,
+% Backtracking Search Optimization Algorithm for numerical optimization
 % problems, Applied Mathematics and Computation 219 (2013) 8121-8144
 % https://doi.org/10.1016/j.amc.2013.02.017
 % ----------------------------------------------------------------------- %
-% Modified to match signature: [best_fitness, best_solution, curve, population_history, fitness_history]
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
+% Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = bsa(problem)
 
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    low = problem.lb;              % Lower bounds
-    up = problem.ub;               % Upper bounds
-    maxIteration = problem.maxFe;  % Maximum function evaluations
+    dim = problem.dimension;
+    low = problem.lb;
+    up = problem.ub;
+    maxIteration = problem.maxFe;
     
     popsize = 30; DIM_RATE = 1;
     %INITIALIZATION
     pop=GeneratePopulation(popsize,dim,low,up); % see Eq.1 in [1]
     
     FE = 0;                         % Function Evaluation Counter
-    curve = zeros(1, maxIteration); % Convergence curve - preallocate for maxFe elements
+    curve = zeros(1, maxIteration);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;           % Fixed history size
-    sampling_interval = max(1, floor(maxIteration / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, popsize, dim);     % Store population at sampled FEs
-    fitness_history = zeros(history_size, popsize);            % Store fitness values at sampled FEs
-    history_index = 1;              % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     [fitnesspop, FE] = calculate_fitness(pop', problem, FE);
     
@@ -53,7 +54,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = current_best;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, pop, fitnesspop, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxIteration);
         end
     end
     
@@ -61,7 +62,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
     % historical_pop  is swarm-memory of BSA as mentioned in [1].
     
-    % ------------------------------------------------------------------------------------------
         while FE<maxIteration
     
             %SELECTION-I
@@ -92,7 +92,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(eval_count) = current_best;
                     [population_history, fitness_history, history_index] = record_history(...
                         eval_count, pop, fitnesspop, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxIteration);
                 end
             end
         end
@@ -135,10 +135,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     end
     end
     
-    function F=get_scale_factor % you can change generation strategy of scale-factor,F    
-         F=3*randn; % STANDARD brownian-walk
-        % F=4*randg;  % brownian-walk    
-        % F=lognrnd(rand,5*rand);  % brownian-walk              
-        % F=1/normrnd(0,5);        % pseudo-stable walk (levy-like)
-        % F=1./gamrnd(1,0.5);      % pseudo-stable walk (levy-like, simulates inverse gamma distribution; levy-distiribution)   
+    function F=get_scale_factor
+        F=3*randn; % standard brownian-walk scale factor of the reference
     end

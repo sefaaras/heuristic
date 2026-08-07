@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Mexican Axolotl Optimization (MAO) for unconstrained benchmark problems
+% Mexican Axolotl Optimization (MAO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   np = 30               % Population size
@@ -24,13 +24,7 @@
 % Mathematics 9(7) (2021) 781
 % https://doi.org/10.3390/math9070781
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = mao(problem)
@@ -51,11 +45,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, np, dim);
-    fitness_history = zeros(history_size, np);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Global best-so-far
@@ -76,7 +68,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = bf;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, axolotl, O, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -87,11 +79,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     M = size(male, 1);      % NOTE: faithful to the reference original, where
     F = size(female, 1);    % 1:size(male)/1:size(female) resolve to 1:1
 
-    %% Starting evaluations
+    % Starting evaluations
     while FE < maxFE
         FE_before = FE;
 
-        % ---- Phase 1: Transition from larvae to adult state ----
+        % Phase 1: Transition from larvae to adult state
         m = axolotl(male, :);
         [~, K] = min(O(male, :));
         mbest = m(K, :);
@@ -126,7 +118,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         end
         [axolotl, O, FE, bf, bs] = get_best(axolotl, f, O, female, problem, FE, maxFE, bf, bs);
 
-        % ---- Phase 2: Injury and restoration ----
+        % Phase 2: Injury and restoration
         list_damage = [];
         axolotl_damage = axolotl(:, :);
         for i = 1:np
@@ -146,7 +138,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         axolotl_p2 = axolotl_damage(list_damage, :);
         [axolotl, O, FE, bf, bs] = get_best(axolotl, axolotl_p2, O, list_damage, problem, FE, maxFE, bf, bs);
 
-        % ---- Phase 3: Reproduction and assortment ----
+        % Phase 3: Reproduction and assortment
         f = axolotl(female, :);
         fitness_female = O(female, :);
         m = axolotl(male, :);
@@ -179,7 +171,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = bf;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, axolotl, O, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -189,7 +181,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% Evaluate new solutions one at a time and greedily accept them
+% Evaluate new solutions one at a time and greedily accept them
 function [axolotl, O, FE, bf, bs] = get_best(axolotl, newaxolotl, O, ids, problem, FE, maxFE, bf, bs)
     for gb_j = 1:size(newaxolotl, 1)
         if FE >= maxFE
@@ -203,7 +195,7 @@ function [axolotl, O, FE, bf, bs] = get_best(axolotl, newaxolotl, O, ids, proble
     end
 end
 
-%% Objective function: evaluate, update FE and best-so-far
+% Objective function: evaluate, update FE and best-so-far
 function [z, FE, bf, bs] = fobj(u, problem, FE, bf, bs)
     [z, FE] = calculate_fitness(u', problem, FE);
     if z < bf
@@ -212,7 +204,7 @@ function [z, FE, bf, bs] = fobj(u, problem, FE, bf, bs)
     end
 end
 
-%% Tournament selection
+% Tournament selection
 function [winner, id_win] = Tournament_Selection(k, axolotl, fitness)
     n = size(axolotl, 1);
     r = randi(n, k, 1);
@@ -222,7 +214,7 @@ function [winner, id_win] = Tournament_Selection(k, axolotl, fitness)
     winner = axolotl(id_win, :);
 end
 
-%% Uniform crossover
+% Uniform crossover
 function [egg1, egg2] = UniformCrossover(f, m, cop)
     n = length(f);
     egg1 = [];

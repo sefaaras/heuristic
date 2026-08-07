@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Spherical Evolution (SE) Algorithm for unconstrained benchmark problems
+% Spherical Evolution (SE)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   q = 20                    % Population size
@@ -17,13 +17,7 @@
 % Applied Soft Computing 81 (2019) 105499
 % https://doi.org/10.1016/j.asoc.2019.105499
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = se(problem)
@@ -39,10 +33,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, q, dim);
-    fitness_history = zeros(history_size, q);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialize population
@@ -56,7 +48,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = global_best_fit;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, Positions, fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     while FE < maxFE
@@ -151,7 +143,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = global_best_fit;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, Positions, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -167,7 +159,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Hyper-Sphere Transform (General D-dimensional) ---
+% Hyper-Sphere Transform (General D-dimensional)
 function ss = HyperSphereTransform(c, d, pp)
     D = length(pp);
     A = c(pp) - d(pp);
@@ -188,14 +180,14 @@ function ss = HyperSphereTransform(c, d, pp)
     ss = C;
 end
 
-%% --- Hyper-Sphere Transform (1D) ---
+% Hyper-Sphere Transform (1D)
 function ss = HyperSphereTransform_1D(c, d, pp)
     R = abs(c(pp) - d(pp));
     C = R * cos(2 * pi * rand);
     ss = C;
 end
 
-%% --- Hyper-Sphere Transform (2D) ---
+% Hyper-Sphere Transform (2D)
 function ss = HyperSphereTransform_2D(c, d, pp)
     A = c(pp) - d(pp);
     R = norm(A, 2);
@@ -206,7 +198,7 @@ function ss = HyperSphereTransform_2D(c, d, pp)
     ss = C;
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -221,7 +213,7 @@ function X = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

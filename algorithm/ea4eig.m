@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% EA4eig Algorithm
+% Evolutionary Algorithm with 4 Eigenvector-based Strategies (EA4eig)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N_init = 100              % Initial population size
@@ -32,13 +32,14 @@
 % operators in local functions and uses the shared problem/calculate_fitness
 % interface used by the rest of the system.
 %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Its two CMA-ES stopping tests are dropped, leaving FE >= maxFe the sole
+% terminator. `PopFit(1) <= 1e-15` assumes PopFit is an error, so a raw
+% objective going negative trips it at once (RC44 stopped at 1.66 % of budget);
+% the conditioning test stopped the whole ensemble on RC25 at 86.30 %. Neither
+% fires on the numeric suites: 7 functions x 3 seeds reproduce the old errors.
+%
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = ea4eig(problem)
@@ -66,13 +67,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     curve = zeros(1, maxFE);
     last_curve_fe = 0;
 
-    % EA4eig reduces population size, so history stores the current top
-    % solutions in a fixed-width array and pads unused rows with NaN.
-    history_pop_size = 100;
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = NaN(history_size, history_pop_size, dim);
-    fitness_history = NaN(history_size, history_pop_size);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     ni = zeros(1, h) + n0;
@@ -87,8 +83,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     [curve, last_curve_fe] = fill_curve(curve, last_curve_fe, FE, bsf_fit_var);
     [population_history, fitness_history, history_index] = record_ea4eig_history( ...
-        min(FE, maxFE), P, dim, history_pop_size, population_history, ...
-        fitness_history, history_index, sampling_interval, history_size);
+        min(FE, maxFE), P, dim, population_history, ...
+        fitness_history, history_index, maxFE);
 
     if FE >= maxFE
         [best_fitness, best_solution, curve] = finalize_output( ...
@@ -120,7 +116,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     % CMA-ES parameters.
     sigma = max((ub(1) - lb(1)) / 2, eps);
     oldPop = P(:, 1:dim)';
-    myeps = 1e-15;
     [mu, weights, mueff, cc, cs, c1, cmu, damps] = cma_parameters(N, dim);
 
     pc = zeros(dim, 1);
@@ -145,9 +140,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     pmax = 0.25;
     pmin = pmax / 2;
 
-    terminate = false;
-
-    while FE < maxFE && ~terminate
+    while FE < maxFE
         [hh, p_min] = roulette_select(ni);
         if p_min < delta
             ni = zeros(1, h) + n0;
@@ -384,10 +377,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     invsqrtC = B * diag(D .^ -1) * B';
                 end
 
-                if (PopFit(1) <= myeps) || (max(D) > 1e7 * max(min(D), realmin))
-                    terminate = true;
-                end
-
             case 4
                 % One jSO generation.
                 Fpole = -1 * ones(1, N);
@@ -529,8 +518,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
         [curve, last_curve_fe] = fill_curve(curve, last_curve_fe, FE, bsf_fit_var);
         [population_history, fitness_history, history_index] = record_ea4eig_history( ...
-            min(FE, maxFE), P, dim, history_pop_size, population_history, ...
-            fitness_history, history_index, sampling_interval, history_size);
+            min(FE, maxFE), P, dim, population_history, ...
+            fitness_history, history_index, maxFE);
 
         optN = round((((Nmin - N_init) / maxFE) * FE) + N_init);
         optN = max(Nmin, optN);
@@ -564,7 +553,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         bsf_fit_var, best_solution_current, curve, last_curve_fe);
 end
 
-%% --- Progress helpers ---
+% Progress helpers
 function [curve, last_curve_fe] = fill_curve(curve, last_curve_fe, FE, best_fit)
     maxFE = length(curve);
     capped_fe = min(FE, maxFE);
@@ -583,32 +572,19 @@ function [best_fitness, best_solution, curve] = finalize_output(best_fit, best_s
 end
 
 function [pop_hist, fit_hist, hist_idx] = record_ea4eig_history( ...
-    current_fe, P, dim, history_pop_size, pop_hist, fit_hist, ...
-    hist_idx, sampling_interval, history_size)
+    current_fe, P, dim, pop_hist, fit_hist, ...
+    hist_idx, maxFE)
+% P holds [position, fitness]; split so record_history stores metrics, not raw positions
 
     if current_fe < 1
         return;
     end
 
-    if mod(current_fe, sampling_interval) == 0 || hist_idx <= history_size
-        if hist_idx <= history_size
-            [sorted_fit, sorted_idx] = sort(P(:, dim + 1));
-            current_size = size(P, 1);
-            top_k = min(history_pop_size, current_size);
-
-            rec_pop = NaN(history_pop_size, dim);
-            rec_fit = NaN(1, history_pop_size);
-            rec_pop(1:top_k, :) = P(sorted_idx(1:top_k), 1:dim);
-            rec_fit(1:top_k) = sorted_fit(1:top_k)';
-
-            pop_hist(hist_idx, :, :) = rec_pop;
-            fit_hist(hist_idx, :) = rec_fit;
-            hist_idx = hist_idx + 1;
-        end
-    end
+    [pop_hist, fit_hist, hist_idx] = record_history(current_fe, P(:, 1:dim), P(:, dim + 1), ...
+        pop_hist, fit_hist, hist_idx, maxFE);
 end
 
-%% --- Parameter helpers ---
+% Parameter helpers
 function F = sample_cobide_f()
     if rand < 0.5
         F = cauchy_rnd(0.65, 0.1);
@@ -679,7 +655,7 @@ function [mu, weights, mueff, cc, cs, c1, cmu, damps] = cma_parameters(N, dim)
     damps = 1 + 2 * max(0, sqrt((mueff - 1) / (dim + 1)) - 1) + cs;
 end
 
-%% --- Selection and boundary helpers ---
+% Selection and boundary helpers
 function y = cauchy_rnd(x0, gamma)
     y = x0 + gamma * tan(pi * (rand(1) - 1 / 2));
 end

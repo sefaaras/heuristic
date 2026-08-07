@@ -1,12 +1,12 @@
 % ----------------------------------------------------------------------- %
-% Coyote Optimization Algorithm (COA) for unconstrained benchmark problems
+% Coyote Optimization Algorithm (COA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   n_packs = 20      % Number of packs
 %   n_coy = 5         % Number of coyotes per pack
 %   p_leave = 0.005*n_coy^2  % Probability of leaving a pack
 %   Ps = 1/D          % Probability of birth
-%   
+%
 % Algorithm Concept:
 %   - Social organization: Pack structure with alpha leaders
 %   - Social condition update: Based on alpha and pack tendency
@@ -19,22 +19,16 @@
 % 2018 IEEE Congress on Evolutionary Computation (CEC), 2018, pp. 1-8
 % https://doi.org/10.1109/CEC.2018.8477769
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = coa(problem)
     
     % Extract problem parameters
-    D = problem.dimension;        % Problem dimension
-    VarMin = problem.lb;          % Lower bounds
-    VarMax = problem.ub;          % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    D = problem.dimension;
+    VarMin = problem.lb;
+    VarMax = problem.ub;
+    maxFE = problem.maxFe;
     
     % Algorithm parameters
     n_coy = 5;                    % Number of coyotes per pack
@@ -45,14 +39,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     pop_total = n_packs * n_coy;  % Total population size
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve - preallocate for maxFe elements
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, pop_total, D);  % Store population at sampled FEs
-    fitness_history = zeros(history_size, pop_total);        % Store fitness values at sampled FEs
-    history_index = 1;                % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     % Initialize coyotes population
     coyotes = repmat(VarMin, pop_total, 1) + rand(pop_total, D) .* ...
@@ -75,7 +67,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = GlobalMin;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, coyotes, costs, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Main loop
@@ -119,8 +111,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     rc2 = randi(n_coy_aux);
                 end
                 
-                % Try to update the social condition according to the alpha and
-                % the pack tendency (Eq. 12)
+                % Social condition updated from the alpha and the pack tendency, Eq. (12)
                 new_c = coyotes_aux(c, :) + rand * (c_alpha - coyotes_aux(rc1, :)) + ...
                                             rand * (tendency - coyotes_aux(rc2, :));
                 
@@ -137,7 +128,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = GlobalMin;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, coyotes, costs, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 
                 % Adaptation (Eq. 14)
@@ -151,7 +142,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 break;
             end
             
-            %% Birth of a new coyote from random parents (Eq. 7 and Alg. 1)
+            % Birth of a new coyote from random parents (Eq. 7 and Alg. 1)
             parents = randperm(n_coy_aux, 2);
             prob1 = (1 - Ps) / 2;
             prob2 = prob1;
@@ -182,7 +173,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = GlobalMin;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, coyotes, costs, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             
             % Replace the worst coyote if pup is better
@@ -195,7 +186,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 ages_aux(which(1), 1) = 0;
             end
             
-            %% Update the pack information
+            % Update the pack information
             coyotes(pack_indices, :) = coyotes_aux;
             costs(pack_indices, :) = costs_aux;
             ages(pack_indices, 1) = ages_aux;
@@ -205,7 +196,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             break;
         end
         
-        %% A coyote can leave a pack and enter another pack (Eq. 4)
+        % A coyote can leave a pack and enter another pack (Eq. 4)
         if n_packs > 1
             if rand < p_leave
                 rp = randperm(n_packs, 2);
@@ -217,10 +208,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
         end
         
-        %% Update coyotes ages
+        % Update coyotes ages
         ages = ages + 1;
         
-        %% Update global best (best alpha coyote among all alphas)
+        % Update global best (best alpha coyote among all alphas)
         [GlobalMin, ibest] = min(costs);
         GlobalParams = coyotes(ibest, :);
     end

@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Spider Wasp Optimizer (SWO) for unconstrained benchmark problems
+% Spider Wasp Optimizer (SWO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   SearchAgents_no = 100  % Initial population size (spider wasps)
@@ -19,8 +19,7 @@
 % Artificial Intelligence Review 56 (2023) 11675-11738.
 % https://doi.org/10.1007/s10462-023-10446-y
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = swo(problem)
@@ -39,10 +38,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, SearchAgents_no, dim);
-    fitness_history = zeros(history_size, SearchAgents_no);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     Positions = initialization(SearchAgents_no, dim, ub, lb);
@@ -57,7 +54,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = Best_score;
             [population_history, fitness_history, history_index] = record_history(...
                 e, Positions, SW_Fit, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -70,7 +67,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         JK = randperm(N);
 
         if rand < TR
-            %% Hunting and nesting behavior
+            % Hunting and nesting behavior
             for i = 1:N
                 r1 = rand(); r2 = rand(); r3 = rand(); p = rand();
                 C = a * (2 * r1 - 1);
@@ -120,12 +117,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = Best_score;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, Positions, SW_Fit, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 if FE >= maxFE, break; end
             end
         else
-            %% Mating behavior
+            % Mating behavior
             for i = 1:N
                 l = (a2 - 1) * rand + 1;
                 SW_m = zeros(1, dim);
@@ -162,13 +159,13 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = Best_score;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, Positions, SW_Fit, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
                 if FE >= maxFE, break; end
             end
         end
 
-        %% Population reduction (Eq.25)
+        % Population reduction (Eq.25)
         N = fix(N_min + (N - N_min) * ((Tmax - FE) / Tmax));
         N = max(N, N_min);
     end
@@ -178,7 +175,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Best_SW;
 end
 
-%% --- Levy sample (1 x d) ---
+% Levy sample (1 x d)
 function L = Levy(d)
     beta = 3 / 2;
     sigma = (gamma(1 + beta) * sin(pi * beta / 2) / (gamma((1 + beta) / 2) * beta * 2^((beta - 1) / 2)))^(1 / beta);
@@ -188,7 +185,7 @@ function L = Levy(d)
     L = 0.05 * step;
 end
 
-%% --- Boundary relocation (random re-init of out-of-range dims) ---
+% Boundary relocation (random re-init of out-of-range dims)
 function x = reflect_bounds(x, ub, lb)
     for j = 1:numel(x)
         if x(j) > ub(j) || x(j) < lb(j)
@@ -197,7 +194,7 @@ function x = reflect_bounds(x, ub, lb)
     end
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = length(ub);
     if Boundary_no == 1

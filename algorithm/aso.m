@@ -18,36 +18,37 @@
 % Knowledge-Based Systems 163 (2019) 283-304
 % https://doi.org/10.1016/j.knosys.2018.08.030
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% The mass maps fitness onto [1, e] across the population range. CEC2020RW RC25
+% really returns Inf near its interior pole, and one Inf atom sends the range to
+% infinity, so every mass becomes Inf/Inf and the swarm is NaN one iteration
+% later. The range is therefore taken over the finite fitnesses and a non-finite
+% atom is given the lightest mass rather than the zero that exp(-Inf) would
+% produce -- acceleration divides by the mass, so a zero there would fling the
+% atom to the bound instead of merely leaving it uninfluential.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = aso(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % Algorithm parameters
-    Atom_Num = 50;                % Population size
+    Atom_Num = 50;
     alpha = 50;                   % Depth weight
     beta = 0.2;                   % Multiplier weight
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
     % Initialize storage for population and fitness history
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, Atom_Num, dim);
-    fitness_history = zeros(history_size, Atom_Num);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Initialize positions and velocities of atoms
@@ -66,11 +67,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = best_fitness_val;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, Atom_Pop, Fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Calculate initial acceleration
-    Max_Iteration = ceil((maxFE - Atom_Num) / Atom_Num);
+    Max_Iteration = ceil(maxFE / Atom_Num);
     Iteration = 1;
     Atom_Acc = Acceleration(Atom_Pop, Fitness, Iteration, Max_Iteration, dim, Atom_Num, X_Best, alpha, beta);
     
@@ -107,7 +108,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness_val;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, Atom_Pop, Fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -126,7 +127,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Helper Functions ---
+% Helper Functions
 
 function Positions = initialization(popsize, dim, ub, lb)
     Boundary_no = size(ub, 2);
@@ -149,7 +150,13 @@ end
 
 function Acc = Acceleration(Atom_Pop, Fitness, Iteration, Max_Iteration, Dim, Atom_Num, X_Best, alpha, beta)
     % Calculate mass based on fitness
-    M = exp(-(Fitness - max(Fitness)) ./ (max(Fitness) - min(Fitness) + eps));
+    finite_fit = Fitness(isfinite(Fitness));   % an Inf objective must not set the range
+    if isempty(finite_fit)
+        M = ones(size(Fitness));
+    else
+        M = exp(-(Fitness - max(finite_fit)) ./ (max(finite_fit) - min(finite_fit) + eps));
+        M(~isfinite(Fitness)) = 1;   % lightest mass, what the worst finite atom carries
+    end
     M = M ./ sum(M);
     
     % Interaction strength (gravity)

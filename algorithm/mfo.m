@@ -1,10 +1,10 @@
 % ----------------------------------------------------------------------- %
-% Moth-Flame Optimization (MFO) Algorithm for unconstrained benchmark problems
+% Moth-Flame Optimization (MFO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 30                  % Population size (number of moths)
 %   b = 1                   % Shape constant for logarithmic spiral
-%   
+%
 % Algorithm Concept:
 %   - Inspired by moth navigation using moon (transverse orientation)
 %   - Moths spiral around flames (best solutions found so far)
@@ -16,35 +16,33 @@
 % Moth-flame optimization algorithm: A novel nature-inspired heuristic paradigm,
 % Knowledge-Based Systems, Volume 89, 2015, Pages 228-249
 % https://doi.org/10.1016/j.knosys.2015.07.006
+%
+% Implementation Note:
+%   curve and best_fitness track the best point the run has evaluated. The flame
+%   set is built from the previous generation, as the reference has it, so it
+%   lags the moths by one generation and never sees the final one; reporting it
+%   directly would leave the last generation's evaluations out of the result.
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds  
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = mfo(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     N = 30;                       % Population size (number of moths)
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve - preallocate for maxFe elements
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));  % Calculate sampling interval
-    population_history = zeros(history_size, N, dim);  % Store population at sampled FEs
-    fitness_history = zeros(history_size, N);          % Store fitness values at sampled FEs
-    history_index = 1;                % Current index in history arrays
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
+    history_index = 1;
     
     % Initialize the positions of moths
     Moth_pos = initialization(N, dim, ub, lb);
@@ -63,14 +61,18 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     % Best solution so far
     Best_flame_score = fitness_sorted(1);
     Best_flame_pos = sorted_population(1, :);
-    
+
+    % Best point evaluated so far; the flames lag it by one generation by design
+    bsf_fit = Best_flame_score;
+    bsf_x = Best_flame_pos;
+
     % Record best fitness for each initial evaluation and store population/fitness history
     for eval_count = 1:N
-        curve(eval_count) = Best_flame_score;
+        curve(eval_count) = bsf_fit;
         % Store history with sampling
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, Moth_pos, Moth_fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
     % Main loop
@@ -117,7 +119,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         
         % Evaluate new moth positions
         [Moth_fitness, FE] = calculate_fitness(Moth_pos', problem, FE);
-        
+        [m_best, m_idx] = min(Moth_fitness);
+        if m_best < bsf_fit
+            bsf_fit = m_best;
+            bsf_x = Moth_pos(m_idx, :);
+        end
+
         % Combine previous population with current flames
         double_population = [previous_population; best_flames];
         double_fitness = [previous_fitness(:)', best_flame_fitness(:)'];
@@ -142,10 +149,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         for eval_idx = 1:N
             eval_count = FE - N + eval_idx;
             if eval_count <= maxFE
-                curve(eval_count) = Best_flame_score;
+                curve(eval_count) = bsf_fit;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, Moth_pos, Moth_fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -153,12 +160,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     end
     
     % Return best solution
-    best_fitness = Best_flame_score;
-    best_solution = Best_flame_pos;
+    best_fitness = bsf_fit;
+    best_solution = bsf_x;
     
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);  % Number of boundaries
     
@@ -177,7 +184,7 @@ function X = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Boundary Handling ---
+% Boundary Handling
 function a = bound(a, ub, lb)
     a(a > ub) = ub(a > ub);
     a(a < lb) = lb(a < lb);

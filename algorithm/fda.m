@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Flow Direction Algorithm (FDA) for unconstrained benchmark problems
+% Flow Direction Algorithm (FDA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   alpha = 50   % Number of flows (population size)
@@ -17,8 +17,7 @@
 % Computers & Industrial Engineering 156 (2021) 107224.
 % https://doi.org/10.1016/j.cie.2021.107224
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = fda(problem)
@@ -38,10 +37,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, alpha, dim);
-    fitness_history = zeros(history_size, alpha);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     flow_x = initialization(alpha, dim, ub, lb);
@@ -59,7 +56,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = Best_fitness;
             [population_history, fitness_history, history_index] = record_history(...
                 e, flow_x, fitness_flow, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -68,7 +65,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         iter = iter + 1;
         W = (((1 - 1 * iter / maxiter + eps)^(2 * randn)) .* (rand(1, dim) .* iter / maxiter) .* rand(1, dim));
 
-        % --- Stage 1: generate one neighbor per flow, evaluate all ---
+        % Stage 1: generate one neighbor per flow, evaluate all
         neighbor_x = zeros(alpha, dim);
         for i = 1:alpha
             Xrand = lb + rand(1, dim) .* (ub - lb);
@@ -85,12 +82,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = Best_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, flow_x, fitness_flow, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         if FE >= maxFE, break; end
 
-        % --- Stage 2: move each flow, evaluate all ---
+        % Stage 2: move each flow, evaluate all
         newflow_x = flow_x;
         for i = 1:alpha
             if fitness_neighbor(i) < fitness_flow(i)
@@ -116,7 +113,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         [newfitness_flow, FE] = calculate_fitness(newflow_x', problem, FE);
         newfitness_flow = newfitness_flow(:);
 
-        % --- Stage 3: greedy accept & update outlet ---
+        % Stage 3: greedy accept & update outlet
         for i = 1:alpha
             if newfitness_flow(i) < fitness_flow(i)
                 flow_x(i, :) = newflow_x(i, :);
@@ -131,7 +128,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = Best_fitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, flow_x, fitness_flow, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         if FE >= maxFE, break; end
@@ -142,7 +139,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = BestX;
 end
 
-%% --- Initialization ---
+% Initialization
 function Positions = initialization(N, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1

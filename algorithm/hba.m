@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Honey Badger Algorithm (HBA) for unconstrained benchmark problems
+% Honey Badger Algorithm (HBA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N    = 30    % Population size (honey badgers)
@@ -20,13 +20,7 @@
 % Mathematics and Computers in Simulation 192 (2022) 84-110.
 % https://doi.org/10.1016/j.matcom.2021.08.013
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = hba(problem)
@@ -46,11 +40,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialization
@@ -69,7 +61,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = bsf;
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, X, fitness, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -107,7 +99,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(FE) = bsf;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, X, fitness, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
             if FE >= maxFE, break; end
         end
@@ -130,7 +122,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Xprey;
 end
 
-%% --- Prey Intensity (Eq. 2) ---
+% Prey Intensity (Eq. 2)
 function I = Intensity(N, Xprey, X)
     for i = 1:N - 1
         di(i) = (norm((X(i, :) - Xprey + eps))).^2;
@@ -144,7 +136,7 @@ function I = Intensity(N, Xprey, X)
     end
 end
 
-%% --- Initialization ---
+% Initialization
 function [X] = initialization(N, dim, up, down)
     if size(up, 2) == 1
         X = rand(N, dim) .* (up - down) + down;

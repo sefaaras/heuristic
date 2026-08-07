@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Stochastic Fractal Search (SFS) Algorithm
+% Stochastic Fractal Search (SFS)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 50                  % Population size (Start_Point)
@@ -19,22 +19,16 @@
 % Knowledge-Based Systems, 75, 1-18.
 % https://doi.org/10.1016/j.knosys.2014.07.025
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = sfs(problem)
     
     % Extract problem parameters
-    dim = problem.dimension;       % Problem dimension
-    lb = problem.lb;              % Lower bounds
-    ub = problem.ub;              % Upper bounds
-    maxFE = problem.maxFe;        % Maximum function evaluations
+    dim = problem.dimension;
+    lb = problem.lb;
+    ub = problem.ub;
+    maxFE = problem.maxFe;
     
     % SFS Parameters
     N = 50;                       % Population size (Start_Point)
@@ -42,13 +36,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     Walk = 1;                     % Walk probability
     
     FE = 0;                           % Function Evaluation Counter
-    curve = zeros(1, maxFE);          % Convergence curve
+    curve = zeros(1, maxFE);
     
-    % Initialize storage for population and fitness history with 1/10000 sampling
-    history_size = 10000;             % Fixed history size
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    % Initialize storage for population and fitness history
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
     
     % Initialize population
@@ -71,15 +63,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = best_fitness_current;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, point, fitness, population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
     
-    % Calculate maximum generations
-    Max_Generation = ceil((maxFE - N) / ((MDN + 2) * N + N));
-    
-    % Main loop
     G = 1;
-    while FE < maxFE && G <= Max_Generation
+    while FE < maxFE
         
         New_Point = zeros(N, dim);
         FitVector = zeros(1, N);
@@ -164,7 +152,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = best_fitness_current;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, New_Point, fit, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
         
@@ -224,7 +212,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                     curve(FE) = best_fitness_current;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, point, fitness, population_history, fitness_history, ...
-                        history_index, sampling_interval, history_size);
+                        history_index, maxFE);
                 end
             end
         end
@@ -243,7 +231,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = initialization(SearchAgents_no, dim, ub, lb)
     Boundary_no = size(ub, 2);
     if Boundary_no == 1
@@ -256,7 +244,7 @@ function X = initialization(SearchAgents_no, dim, ub, lb)
     end
 end
 
-%% --- Bound Checking Function ---
+% Bound Checking Function
 function p = Bound_Checking(p, lowB, upB)
     for i = 1:size(p, 1)
         upper = double(gt(p(i, :), upB));
@@ -274,7 +262,7 @@ function p = Bound_Checking(p, lowB, upB)
     end
 end
 
-%% --- Diffusion Process Function ---
+% Diffusion Process Function
 function [createPoint, best_fitness, FE] = Diffusion_Process(Point, dim, lb, ub, g, MDN, Walk, BestPoint, problem, FE)
     % Creating new points based on diffusion process
     NumDiffusion = MDN;

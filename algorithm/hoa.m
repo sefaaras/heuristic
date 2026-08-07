@@ -1,11 +1,22 @@
 % ----------------------------------------------------------------------- %
-% Horse herd Optimization Algorithm (HOA) for benchmark problems
+% Horse herd Optimization Algorithm (HOA)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
-%   nHorse = 50   % Population size (horses)
-%   Behaviors: Grazing(g), Hierarchy(h), Sociability(s), Imitation(i),
-%              Defense(d), Roam/Random(r); coefficients per age group
-%              (Alpha/Beta/Gamma/Delta by rank).
+%   nHorse = 50            % Population size (horses)
+%   w = 1                  % Inertia weight
+%   phiD = phiI = 0.02     % Fraction of the herd counted as bad / good
+%   VelMax = 0.1*(ub-lb)   % Velocity clamp
+%   g = 1.5, h = 0.5..1.5, s/i/d/r = 0.05..0.5   % Behaviour coefficients per age group
+%
+% Algorithm Concept:
+%   - Horses are ranked by personal-best cost into four age groups:
+%     Alpha (top 10%), Beta (30%), Gamma (60%), Delta (the rest)
+%   - Each group mixes a different subset of six behaviours into its velocity:
+%     grazing (own pbest), hierarchy (global best), sociability (herd mean),
+%     imitation (good group), defense (away from bad group), roaming (random)
+%   - Younger groups get more random and social terms, older ones converge on
+%     the global best, so exploration decays with rank rather than with time
+%   - Velocity is clamped and the position updated PSO-style
 %
 % Reference:
 % Farhad MiarNaeimi, Gholamreza Azizyan, Mohsen Rashki,
@@ -14,8 +25,7 @@
 % Knowledge-Based Systems 213 (2021) 106711.
 % https://doi.org/10.1016/j.knosys.2020.106711
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension, lb, ub, maxFe, fhd, number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = hoa(problem)
@@ -44,10 +54,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, nHorse, dim);
-    fitness_history = zeros(history_size, nHorse);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialization
@@ -68,7 +76,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(e) = GlobalBestCost;
             [population_history, fitness_history, history_index] = record_history(...
                 e, Position, Cost, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -138,7 +146,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(ec) = GlobalBestCost;
                 [population_history, fitness_history, history_index] = record_history(...
                     ec, Position, Cost, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
 

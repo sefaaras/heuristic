@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Wild Horse Optimizer (WHO) for unconstrained benchmark problems
+% Wild Horse Optimizer (WHO)
 % ----------------------------------------------------------------------- %
 % NOTE: stored as `whoa` because `who` is a built-in MATLAB command that a
 % path function cannot override; call this algorithm as 'whoa'.
@@ -21,13 +21,7 @@
 % Engineering with Computers 38 (Suppl. 4) (2022) 3025-3056.
 % https://doi.org/10.1007/s00366-021-01438-z
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = whoa(problem)
@@ -47,10 +41,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     FE = 0;
     curve = zeros(1, maxFE);
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     empty.pos = [];
@@ -93,7 +85,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     % Record initial evaluations
     [population_history, fitness_history, history_index] = record_pop(...
         Stallion, N, dim, 1, min(FE, maxFE), bsf, curve, ...
-        population_history, fitness_history, history_index, sampling_interval, history_size);
+        population_history, fitness_history, history_index, maxFE);
     for eval_count = 1:min(FE, maxFE)
         curve(eval_count) = bsf;
     end
@@ -108,8 +100,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             [~, index] = sort([Stallion(i).group.cost]);
             Stallion(i).group = Stallion(i).group(index);
 
-            % Pre-initialise r3/rr so the stallion update below is always
-            % defined even if every foal took the crossover branch this pass.
+            % r3/rr pre-initialised so the stallion update is defined even if every foal crossed over
             z = rand(1, dim) < TDR;
             r1 = rand; r2 = rand(1, dim);
             idx = (z == 0);
@@ -175,7 +166,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         % Record population history for this iteration's FE block
         [population_history, fitness_history, history_index] = record_pop(...
             Stallion, N, dim, FE_before + 1, min(FE, maxFE), bsf, curve, ...
-            population_history, fitness_history, history_index, sampling_interval, history_size);
+            population_history, fitness_history, history_index, maxFE);
 
         l = l + 1;
     end
@@ -186,8 +177,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = gBest;
 end
 
-%% --- Assemble population and record its history over an FE block ---
-function [pop_hist, fit_hist, hist_idx] = record_pop(Stallion, N, dim, fe_from, fe_to, ~, ~, pop_hist, fit_hist, hist_idx, sampling_interval, history_size)
+% Assemble population and record its history over an FE block
+function [pop_hist, fit_hist, hist_idx] = record_pop(Stallion, N, dim, fe_from, fe_to, ~, ~, pop_hist, fit_hist, hist_idx, maxFE)
     if fe_to < fe_from, return; end
     allPos = zeros(N, dim);
     allCost = zeros(1, N);
@@ -206,11 +197,11 @@ function [pop_hist, fit_hist, hist_idx] = record_pop(Stallion, N, dim, fe_from, 
     for eval_count = fe_from:fe_to
         [pop_hist, fit_hist, hist_idx] = record_history(...
             eval_count, allPos, allCost, pop_hist, fit_hist, hist_idx, ...
-            sampling_interval, history_size);
+            maxFE);
     end
 end
 
-%% --- Exchange best group member with the stallion ---
+% Exchange best group member with the stallion
 function Stallion = exchange(Stallion)
     nStallion = length(Stallion);
     for i = 1:nStallion

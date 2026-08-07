@@ -1,5 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Levy Flight Distribution (LFD) for unconstrained benchmark problems
+% Levy Flight Distribution (LFD)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N = 50          % Population size
@@ -17,13 +17,15 @@
 % Engineering Applications of Artificial Intelligence 94 (2020) 103731
 % https://doi.org/10.1016/j.engappai.2020.103731
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Implementation Note:
+% Positions are clamped to the box before evaluation; the reference applies no
+% bound handling at all. The random re-initialisation in the neighbourhood loop
+% draws each dimension from its own [lb(j), ub(j)]; the reference uses lb(1)/ub(1)
+% for every dimension, which is identical on a uniform box but on CEC2020RW, whose
+% spans run 1e-2..1e6, put most dimensions into dimension 1's range for the
+% evaluator to clamp straight back onto the bound.
+% ----------------------------------------------------------------------- %
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = lfd(problem)
@@ -41,10 +43,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     curve = zeros(1, maxFE);
 
     % History storage
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, N, dim);
-    fitness_history = zeros(history_size, N);
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialize the population
@@ -63,7 +63,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         curve(eval_count) = TargetFitness;
         [population_history, fitness_history, history_index] = record_history(...
             eval_count, Positions, PositionsFitness', population_history, fitness_history, ...
-            history_index, sampling_interval, history_size);
+            history_index, maxFE);
     end
 
     vec_flag = [1, -1];
@@ -97,7 +97,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                                 X_rand = Positions(ll(rand_leader_index), :);
                                 Positions_temp(j, :) = LevyFlights(Positions(j, :), X_rand, lb, ub);
                             else
-                                Positions_temp(j, :) = lb(1) + rand(1, dim) * (ub(1) - lb(1));
+                                Positions_temp(j, :) = lb + rand(1, dim) .* (ub - lb);
                             end
                         end
                         pos_temp_nei{NeighborN} = Positions(j, :);
@@ -117,7 +117,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             NN(i) = NeighborN;
         end
 
-        Positions = Positions_temp;
+        Positions = min(max(Positions_temp, lb), ub);
         [PositionsFitness, FE] = calculate_fitness(Positions', problem, FE);
         PositionsFitness = PositionsFitness(:)';
         l = l + N;
@@ -134,7 +134,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = TargetFitness;
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, Positions, PositionsFitness', population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -143,7 +143,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = TargetPosition;
 end
 
-%% --- Levy Flights (Mantegna's algorithm) ---
+% Levy Flights (Mantegna's algorithm)
 function CP = LevyFlights(CP, DP, Lb, Ub)
     n = size(CP, 1);
     beta = 3 / 2;
@@ -159,13 +159,13 @@ function CP = LevyFlights(CP, DP, Lb, Ub)
     end
 end
 
-%% --- Simple bounds ---
+% Simple bounds
 function s = simplebounds(s, Lb, Ub)
     I = s < Lb; s(I) = Lb(I);
     J = s > Ub; s(J) = Ub(J);
 end
 
-%% --- Initialization Function ---
+% Initialization Function
 function X = Initialization(N, dim, up, down)
     X = zeros(N, dim);
     for i = 1:dim
@@ -173,7 +173,7 @@ function X = Initialization(N, dim, up, down)
     end
 end
 
-%% --- Distance (comfort-zone metric, first two coordinates) ---
+% Distance (comfort-zone metric, first two coordinates)
 function d = Distance(a, b)
     d = sqrt((a(1) - b(1)) ^ 2 + (a(2) - b(2)) ^ 2);
 end

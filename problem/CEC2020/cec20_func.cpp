@@ -94,10 +94,10 @@ void mexFunction (int nlhs, mxArray * plhs[], int nrhs, const mxArray * prhs[])
 		mexErrMsgTxt ("example: f= cec20_func([3.3253000e+000, -1.2835000e+000]', 1);");
     }
 	n = mxGetM (prhs[0]);
-	if (!(n==2||n==5||n==10||n==15||n==20||n==30||n==50||n==100))
+	if (!(n==2||n==5||n==10||n==15||n==20))
     {
 		mexPrintf ("usage: f = cec20_func(x, func_num);\n");
-		mexErrMsgTxt ("Error: Test functions are only defined for D=2,5,10,15,20,30,50,100.");
+		mexErrMsgTxt ("Error: Test functions are only defined for D=2,5,10,15,20.");
     }
 	m = mxGetN (prhs[0]);
 	x = mxGetPr (prhs[0]);
@@ -149,9 +149,9 @@ void cec20_test_func(double *x, double *f, int nx, int mx,int func_num0)
 		for (i=0; i<nx; i++)
 			x_bound[i]=100.0;
 
-		if (!(nx==2||nx==5||nx==10||nx==15||nx==20||nx==30||nx==50||nx==100))
+		if (!(nx==2||nx==5||nx==10||nx==15||nx==20))
 		{
-			printf("\nError: Test functions are only defined for D=2,5,10,15,20,30,50,100.\n");
+			printf("\nError: Test functions are only defined for D=2,5,10,15,20.\n");
 		}
 		if (nx==2&&(func_num==4||func_num==16||func_num==6))
 		{
@@ -304,7 +304,7 @@ void cec20_test_func(double *x, double *f, int nx, int mx,int func_num0)
 			f[i]+=2100.0;
 			break;
 		case 7:	
-            grie_rosen_func(&x[i*nx],&f[i],nx,OShift,M,0,0);//f19 in cec2017 
+            grie_rosen_func(&x[i*nx],&f[i],nx,OShift,M,1,1);//f19 in cec2017 // change from (&x[i*nx],&f[i],nx,OShift,M,0,0) to (&x[i*nx],&f[i],nx,OShift,M,1,1)
 			f[i]+=1900.0;
 			break;
 		case 8:	
@@ -443,7 +443,7 @@ void sum_diff_pow_func (double *x, double *f, int nx, double *Os,double *Mr, int
 	for (i=0; i<nx; i++)
 	{
 		double xi = z[i];
-		double newv = pow((abs(xi)),(i+1));
+		double newv = pow((fabs(xi)),(i+1));
 		sum = sum + newv;
 	}
 	
@@ -927,14 +927,13 @@ void hf01 (double *x, double *f, int nx, double *Os,double *Mr,int *S,int s_flag
 	}
 	i=0;
 	schwefel_func(&y[G[i]],&fit[i],G_nx[i],Os,Mr,0,0);
-//     printf("G_nx[%d]=%d\n",i,G_nx[i]);
+
 	i=1;
 	rastrigin_func(&y[G[i]],&fit[i],G_nx[i],Os,Mr,0,0);
-//     printf("G_nx[%d]=%d\n",i,G_nx[i]);
+
 	i=2;
 	ellips_func(&y[G[i]],&fit[i],G_nx[i],Os,Mr,0,0);
-//     printf("G_nx[%d]=%d\n",i,G_nx[i]);
-//     printf("fit[2]=%f\n",fit[2]);
+
 	f[0]=0.0;
 	for(i=0;i<cf_num;i++)
 	{
@@ -1076,14 +1075,26 @@ void hf05 (double *x, double *f, int nx, double *Os,double *Mr,int *S,int s_flag
 	double fit[5];
 	int G[5],G_nx[5];
 	double Gp[5]={0.1,0.2,0.2,0.2,0.3};
-
-	tmp=0;
-	for (i=1; i<cf_num; i++)
-	{
-		G_nx[i] = ceil(Gp[i]*nx);
-		tmp += G_nx[i];
-	}
-	G_nx[0]=nx-tmp;
+   
+    if (nx==5) // deal with D=6**04/01/2020
+    { 
+        G_nx[0]=1;
+        G_nx[1]=1;
+        G_nx[2]=1;
+        G_nx[3]=1;
+        G_nx[4]=1;
+      
+    }// deal with D=5**04/01/2020   
+    else
+    {
+        tmp=0;
+        for (i=1; i<cf_num; i++)
+        {
+            G_nx[i] = ceil(Gp[i]*nx);
+            tmp += G_nx[i];
+        }
+        G_nx[0]=nx-tmp;
+    }
 
 	G[0]=0;
 	for (i=1; i<cf_num; i++)
@@ -1099,6 +1110,7 @@ void hf05 (double *x, double *f, int nx, double *Os,double *Mr,int *S,int s_flag
 	}
 	i=0;
 	escaffer6_func(&y[G[i]],&fit[i],G_nx[i],Os,Mr,0,0);
+    // printf("\n when i=0 G_nx[i]= %d  \n", G_nx[i]);
 	i=1;
 	hgbat_func(&y[G[i]],&fit[i],G_nx[i],Os,Mr,0,0);
 	i=2;
@@ -1107,7 +1119,6 @@ void hf05 (double *x, double *f, int nx, double *Os,double *Mr,int *S,int s_flag
 	schwefel_func(&y[G[i]],&fit[i],G_nx[i],Os,Mr,0,0);
 	i=4;
 	ellips_func(&y[G[i]],&fit[i],G_nx[i],Os,Mr,0,0);
-
 	f[0]=0.0;
 	for(i=0;i<cf_num;i++)
 	{
@@ -1121,13 +1132,25 @@ void hf06 (double *x, double *f, int nx, double *Os,double *Mr,int *S,int s_flag
 	int G[4],G_nx[4];
 	double Gp[4]={0.2,0.2,0.3,0.3};
 
-	tmp=0;
-	for (i=0; i<cf_num-1; i++)
-	{
-		G_nx[i] = ceil(Gp[i]*nx);
-		tmp += G_nx[i];
-	}
-	G_nx[cf_num-1]=nx-tmp;
+	 if (nx==5) // deal with D=5**04/01/2020
+    { 
+        
+            G_nx[0] = 1;
+            G_nx[1] = 1;
+            G_nx[2] = 1;
+            G_nx[3] = 2;
+        
+    }// deal with D=6**04/01/2020   
+    else
+    {
+        tmp=0;
+        for (i=1; i<cf_num; i++)
+        {
+            G_nx[i] = ceil(Gp[i]*nx);
+            tmp += G_nx[i];
+        }
+        G_nx[0]=nx-tmp;
+    }
 
 	G[0]=0;
 	for (i=1; i<cf_num; i++)

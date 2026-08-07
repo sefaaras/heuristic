@@ -1,6 +1,5 @@
 % ----------------------------------------------------------------------- %
-% Electric Charged Particles Optimization (ECPO) for unconstrained
-% benchmark problems
+% Electric Charged Particles Optimization (ECPO)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   ECPSize = 50          % Population size (charged particles)
@@ -19,13 +18,7 @@
 % Artificial Intelligence Review 54 (2021) 1767-1802
 % https://doi.org/10.1007/s10462-020-09890-x
 % ----------------------------------------------------------------------- %
-% Input: problem structure with fields:
-%   - dimension: problem dimension
-%   - lb: lower bounds
-%   - ub: upper bounds
-%   - maxFe: maximum function evaluations
-%   - fhd: function handle
-%   - number: function number
+% Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
 function [best_fitness, best_solution, curve, population_history, fitness_history] = ecpo(problem)
@@ -45,11 +38,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     FE = 0;
     curve = zeros(1, maxFE);
 
-    % History storage with 1/10000 sampling
-    history_size = 10000;
-    sampling_interval = max(1, floor(maxFE / history_size));
-    population_history = zeros(history_size, ECPSize, ProblemSize);
-    fitness_history = zeros(history_size, ECPSize);
+    % History storage
+    population_history = [];  % record_history allocates the metric buffers on its first sample
+    fitness_history = [];
     history_index = 1;
 
     % Initialization
@@ -64,7 +55,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             curve(eval_count) = F_ECP(1);
             [population_history, fitness_history, history_index] = record_history(...
                 eval_count, ECP, F_ECP, population_history, fitness_history, ...
-                history_index, sampling_interval, history_size);
+                history_index, maxFE);
         end
     end
 
@@ -164,7 +155,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 curve(eval_count) = F_ECP(1);
                 [population_history, fitness_history, history_index] = record_history(...
                     eval_count, ECP, F_ECP, population_history, fitness_history, ...
-                    history_index, sampling_interval, history_size);
+                    history_index, maxFE);
             end
         end
     end
@@ -174,7 +165,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
 end
 
-%% --- Boundary handling ---
+% Boundary handling
 function [x] = bound(x, l, u)
     for j = 1:size(x, 1)
         x(j, x(j, :) < l) = l(x(j, :) < l);
