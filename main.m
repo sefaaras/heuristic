@@ -110,7 +110,9 @@ fprintf('Total jobs created: %d\n', total_jobs);
 
 % Folder-level stamp: an empty file named <id>_<date>_<commit>. A folder with
 % no marker at all predates the scheme and is v1.
-pipeline_id = 'v7';
+% Bump this and nothing else here; what the id means, and what it invalidates,
+% is recorded in pipeline_versions.m.
+pipeline_id = 'v8';
 [git_status, pipeline_commit] = system('git rev-parse --short HEAD');
 if git_status ~= 0
     pipeline_commit = 'nogit';

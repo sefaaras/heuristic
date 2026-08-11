@@ -441,6 +441,16 @@ if(prob_k == 22)
     f  = max([i1-i01,i2-i02,iR-i0R],[],2);
     %% constraints
     Dmax = 220; dlt22 = 0.5; dlt33 = 0.5; dlt55 = 0.5; dlt35 = 0.5; dlt34 = 0.5; dlt56 = 0.5;
+    % beta is one value PER SOLUTION. The published line here is
+    %     if beta == real(beta), g(:,8) = <formula>; else g(:,8) = 1e6; end
+    % which MATLAB reads as ALL(beta == real(beta)) as soon as more than one
+    % solution is passed in: a single complex beta anywhere in the population
+    % then writes the 1e6 penalty over EVERY row, so a point's constraint value
+    % depended on which points it was evaluated with. Measured on random points
+    % in this box, 7.8 % have a complex beta, so a population of 50 triggered it
+    % 98 % of the time. Split per row below; at ps = 1 this is the published
+    % behaviour exactly, and for a population whose betas are all real both
+    % forms agree. See tools/verify_campaign.m (KNOWN_DEFECTS) and pipeline v8.
     beta = acos(((N6-N3).^2+(N4+N5).^2-(N3+N5).^2)./(2.*(N6-N3).*(N4+N5)));
     g(:,1) = m2.*(N6+2.5)-Dmax;
     g(:,2) = m1.*(N1+N2)+m1.*(N2+2)-Dmax;
@@ -449,11 +459,10 @@ if(prob_k == 22)
     g(:,5) = -((N1+N2).*sin(pi./p)-N2-2-dlt22);
     g(:,6) = -((N6-N3).*sin(pi./p)-N3-2-dlt33);
     g(:,7) = -((N4+N5).*sin(pi./p)-N5-2-dlt55);
-    if beta == real(beta)
-       g(:,8) = (N3+N5+2+dlt35).^2-((N6-N3).^2+(N4+N5).^2-2.*(N6-N3).*(N4+N5).*cos(2.*pi./p-beta));
-    else
-       g(:,8) = 1e6;
-    end
+    ok = (beta == real(beta));            % NaN falls to the penalty branch too
+    g(:,8) = 1e6;
+    g(ok,8) = (N3(ok)+N5(ok)+2+dlt35).^2-((N6(ok)-N3(ok)).^2+(N4(ok)+N5(ok)).^2 ...
+              -2.*(N6(ok)-N3(ok)).*(N4(ok)+N5(ok)).*cos(2.*pi./p(ok)-beta(ok)));
     g(:,9) = -(N6-2.*N3-N4-4-2.*dlt34);
     g(:,10) = -(N6-N4-2.*N5-4-2.*dlt56);
     h(:,1)  = rem(N6-N4,p);
