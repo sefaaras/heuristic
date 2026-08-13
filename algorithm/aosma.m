@@ -19,15 +19,15 @@
 % ----------------------------------------------------------------------- %
 % Implementation Note:
 % Eq.(6) divides by (best - worst) and the inherited "+ eps" covers only a zero
-% span: CEC2020RW RC25 returns Inf near its interior pole, and one Inf smell
-% makes every ratio Inf/Inf and the population NaN within a generation. The span
-% is taken over the finite smells instead, a non-finite one getting the worst
-% ratio -- same defect and treatment as the SMA base. An accepted opposite
-% solution now carries its fitness; the reference kept the pre-opposition value,
-% which survived as oldfitness to order the smell index and set p in Eq.(4).
-% Eq.(11-12) run on FE/maxFE, not an iteration count: Eq.(14-16) fires only for
-% an agent that got worse, so no fixed cap matches the budget -- the inherited
-% ceil(maxFE/(N*1.25)) ended the CEC2014 composition runs at 82 % of it.
+% span: RC25 returns Inf near its interior pole, and one Inf smell makes every
+% ratio Inf/Inf and the population NaN in a generation. The span is taken over
+% the finite smells, a non-finite one getting the worst ratio, as in the SMA
+% base. An accepted opposite solution now carries its fitness; the reference kept
+% the pre-opposition value, surviving as oldfitness to order Eq.(7) and set p.
+% ceil(maxFE/(N*1.25)) assumes Eq.(14-16) re-evaluates a quarter of the swarm,
+% but it fires only for an agent that got worse, so where nothing worsens the run
+% ended at 82 % of the budget. It is now the horizon of Eq.(11-12) alone, FE
+% terminates, and t is clamped at 1, so only runs that reached it change.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -41,6 +41,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     maxFE = problem.maxFe;
 
     N = 30;
+    Max_iter = ceil(maxFE / (N * 1.25));
 
     FE = 0;
     curve = zeros(1, maxFE);
@@ -54,6 +55,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     weight = ones(N, dim);
 
     X = initialization(N, dim, ub, lb);
+    it = 1;
     lb = ones(1, dim) .* lb;
     ub = ones(1, dim) .* ub;
     del = 0.03;
@@ -109,7 +111,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             Destination_fitness = bestFitness;
         end
 
-        t = FE / maxFE;
+        t = min(it / Max_iter, 1);
         a = atanh(-t + 1);   % Eq. (11)
         b = 1 - t;           % Eq. (12)
 
@@ -177,6 +179,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 if FE >= maxFE, break; end
             end
         end
+
+        it = it + 1;
     end
 
     curve(min(FE, maxFE):end) = bsf;
