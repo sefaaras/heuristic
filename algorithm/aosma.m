@@ -18,16 +18,16 @@
 % https://doi.org/10.1007/s00500-021-06140-2
 % ----------------------------------------------------------------------- %
 % Implementation Note:
-% Eq.(6) divides by (best - worst), and the inherited "+ eps" only covers a zero
-% span, not a non-finite one. CEC2020RW RC25 really returns Inf near its interior
-% pole, and a single Inf smell makes the span -Inf, every ratio Inf/Inf and the
-% whole population NaN within one generation. The span is therefore taken over
-% the finite smells and a non-finite smell is given the worst ratio. Same defect
-% and same treatment as the SMA base this algorithm extends.
-% An accepted opposite solution now carries its fitness: the reference replaces
-% X but leaves AllFitness at the pre-opposition value, and that value survives
-% into the next generation as oldfitness, which orders the smell index and sets
-% p in Eq.(4). The improvement was therefore made and then forgotten.
+% Eq.(6) divides by (best - worst) and the inherited "+ eps" covers only a zero
+% span: CEC2020RW RC25 returns Inf near its interior pole, and one Inf smell
+% makes every ratio Inf/Inf and the population NaN within a generation. The span
+% is taken over the finite smells instead, a non-finite one getting the worst
+% ratio -- same defect and treatment as the SMA base. An accepted opposite
+% solution now carries its fitness; the reference kept the pre-opposition value,
+% which survived as oldfitness to order the smell index and set p in Eq.(4).
+% Eq.(11-12) run on FE/maxFE, not an iteration count: Eq.(14-16) fires only for
+% an agent that got worse, so no fixed cap matches the budget -- the inherited
+% ceil(maxFE/(N*1.25)) ended the CEC2014 composition runs at 82 % of it.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -41,7 +41,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     maxFE = problem.maxFe;
 
     N = 30;
-    Max_iter = ceil(maxFE / (N * 1.25));
 
     FE = 0;
     curve = zeros(1, maxFE);
@@ -55,7 +54,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     weight = ones(N, dim);
 
     X = initialization(N, dim, ub, lb);
-    it = 1;
     lb = ones(1, dim) .* lb;
     ub = ones(1, dim) .* ub;
     del = 0.03;
@@ -78,7 +76,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     end
 
     % Main loop
-    while it <= Max_iter && FE < maxFE
+    while FE < maxFE
         oldfitness = AllFitness;
         [SmellOrder, SmellIndex] = sort(oldfitness);   % Eq. (7)
         worstFitness = SmellOrder(N);
@@ -111,8 +109,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             Destination_fitness = bestFitness;
         end
 
-        a = atanh(-(it / Max_iter) + 1);   % Eq. (11)
-        b = 1 - it / Max_iter;              % Eq. (12)
+        t = FE / maxFE;
+        a = atanh(-t + 1);   % Eq. (11)
+        b = 1 - t;           % Eq. (12)
 
         for i = 1:N   % Eq. (13)
             if rand < del
@@ -178,8 +177,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 if FE >= maxFE, break; end
             end
         end
-
-        it = it + 1;
     end
 
     curve(min(FE, maxFE):end) = bsf;
