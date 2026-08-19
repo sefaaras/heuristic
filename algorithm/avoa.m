@@ -19,6 +19,13 @@
 % Computers & Industrial Engineering 158 (2021) 107408
 % https://doi.org/10.1016/j.cie.2021.107408
 % ----------------------------------------------------------------------- %
+% Implementation Note:
+% The boundary repair also fires on a non-finite coordinate, redrawing it in its
+% own box. Exploitation phase 1 divides by (Best - x.^2), which is 0/0 where a
+% coordinate and the best both sit at 0 -- routine on the 33 CEC2020RW problems
+% with a zero lower bound. NaN passes both x > ub and x < lb, so it reached
+% best_solution in 383 campaign runs, scored at a clamped point by max/min.
+% ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
@@ -156,7 +163,11 @@ end
 
 % Boundary Handling
 function [X] = boundaryCheck(X, lb, ub)
+    lb = lb .* ones(1, size(X, 2));
+    ub = ub .* ones(1, size(X, 2));
     for i = 1:size(X, 1)
+        NF = ~isfinite(X(i, :));
+        X(i, NF) = rand(1, sum(NF)) .* (ub(NF) - lb(NF)) + lb(NF);
         FU = X(i, :) > ub;
         FL = X(i, :) < lb;
         X(i, :) = (X(i, :) .* (~(FU + FL))) + ub .* FU + lb .* FL;

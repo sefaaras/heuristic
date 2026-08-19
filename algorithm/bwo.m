@@ -19,6 +19,12 @@
 % Knowledge-Based Systems 251 (2022) 109215.
 % https://doi.org/10.1016/j.knosys.2022.109215
 % ----------------------------------------------------------------------- %
+% Implementation Note:
+% The reported best is synchronised from the population after the loop, not only
+% inside it: the published run ends between iterations, but the FE guard also
+% ends one mid-iteration and that exit skipped the sync, so a last-iteration
+% improvement reached the curve and not best_fitness (3 of 19380 campaign runs).
+% ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
@@ -166,6 +172,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             xposbest = pos(index, :);
         end
         T = T + 1;
+    end
+
+    [fval, index] = min(fit);
+    if fval < fvalbest
+        fvalbest = fval;
+        xposbest = pos(index, :);
     end
 
     curve(min(FE, maxFE):end) = bsf;
