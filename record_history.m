@@ -595,8 +595,17 @@ end
 
 function r = pearson(a, b)
 % NaN when either series has zero variance.
+%
+% Each centred series is scaled by its largest magnitude first: the correlation
+% is scale free, the denominator is not. A converged population put both series
+% near 1e-80 and their product at 1e-319 -- subnormal, four digits left -- and
+% fdc came back as 1.0000218, outside the [-1, 1] it is defined on.
     a = a - mean(a);
     b = b - mean(b);
+    sa = max(abs(a));
+    sb = max(abs(b));
+    if sa > 0, a = a / sa; end
+    if sb > 0, b = b / sb; end
     den = sqrt(sum(a .^ 2) * sum(b .^ 2));
     if ~isfinite(den) || den <= 0
         r = NaN;

@@ -19,6 +19,15 @@
 % 2018 IEEE Congress on Evolutionary Computation (CEC), 2018, pp. 1-8
 % https://doi.org/10.1109/CEC.2018.8477769
 % ----------------------------------------------------------------------- %
+% Implementation Note:
+% The reported fitness and the reported solution are read from one snapshot of
+% the population. min(costs) is recomputed for the convergence curve at every
+% evaluation, and reading only the value there left the solution behind at the
+% previous year's alpha: with the budget ending mid-year the run reported a
+% fitness that its own best_solution does not have (1090 of 19380 campaign
+% runs). The pack is still the unit that commits, so the last partial pack of a
+% run is discarded as in the reference.
+% ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
@@ -124,7 +133,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 
                 % Record convergence curve and history
                 if FE <= maxFE
-                    [GlobalMin, ~] = min(costs);
+                    [GlobalMin, ibest] = min(costs);
+                    GlobalParams = coyotes(ibest, :);
                     curve(FE) = GlobalMin;
                     [population_history, fitness_history, history_index] = record_history(...
                         FE, coyotes, costs, population_history, fitness_history, ...
@@ -169,7 +179,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             
             % Record convergence curve and history
             if FE <= maxFE
-                [GlobalMin, ~] = min(costs);
+                [GlobalMin, ibest] = min(costs);
+                GlobalParams = coyotes(ibest, :);
                 curve(FE) = GlobalMin;
                 [population_history, fitness_history, history_index] = record_history(...
                     FE, coyotes, costs, population_history, fitness_history, ...
