@@ -26,7 +26,9 @@ function main_cec2022(varargin)
 %    say so.
 %
 % 3. The default pool is 185 of the 198 files -- see default_pool() for the 13
-%    that are out and what each costs.
+%    that are out and what each costs. 'pool' switches to the FDB study instead:
+%    'proposed' is the 156 FDB variants in proposed/, 'fdb' prepends their 50
+%    base algorithms, and 'all' is the default pool plus the variants.
 %
 % CHUNKING. A single MATLAB process that runs the whole pool back to back dies
 % intermittently with an uncatchable access violation in MATLAB's own LXE
@@ -41,6 +43,37 @@ function main_cec2022(varargin)
 %                'runs', 3, 'experiments', {'cec2022_10'})    % pilot
 %   main_cec2022('chunk', [1 25])                            % pool entries 1..25
 %   main_cec2022()                                           % all, one process
+%
+% THE FDB CAMPAIGN, on a run machine. Two commands, nothing to edit.
+%
+%   main_cec2022('pool', 'proposed', 'verify', true)    % under a minute
+%   main_cec2022('pool', 'proposed', 'driver', true)    % days; resumable
+%
+% 'verify' is the preflight: the pool resolves, the benchmark mex evaluates on
+% every function of every configured dimension, fdb_index still agrees with the
+% repository's fitnessDistanceBalance, two variants go through the recorder and
+% save_run and their stored best_solution re-evaluates to the stored
+% best_fitness, a pool of the requested size starts with its workers in the
+% repository root, and the modelled footprint fits. It ends non-zero if any of
+% that fails, so it is worth a minute before a sweep that runs for days.
+%
+% 'driver' is this function spawning one child MATLAB per chunk, experiments
+% outside chunks, retrying a chunk that exits non-zero. Separate processes are
+% the point: see CHUNKING above. Rerun the same command after a crash or a
+% reboot -- every chunk resumes and only what was in flight is redone.
+%
+% Without 'driver', 'dry_run' prints the same command list to run by hand, in
+% bash and .bat form; one chunk on its own is
+%
+%   main_cec2022('pool', 'proposed', 'experiments', {'cec2022_10'}, ...
+%                'chunk', [1 25])
+%
+% The unmodified base algorithms are NOT in this pool -- they were already run
+% at these seeds and their results stand as the control arm. 'fdb' prepends
+% them for a machine that has to produce its own.
+%
+% proposed/ IS GITIGNORED, so a run machine does not get the variants from a
+% pull; copy the folder across by hand, as with tools/.
 % ----------------------------------------------------------------------- %
 
     opt = parse_options(varargin);
@@ -58,6 +91,7 @@ function main_cec2022(varargin)
     end
 
     addpath(fullfile(root, 'algorithm'));
+    addpath(fullfile(root, 'proposed'));
     addpath(fullfile(root, 'problem', 'CEC2022'));
 
     names_all = resolve_algorithms(opt, root);
@@ -70,8 +104,21 @@ function main_cec2022(varargin)
         configs{e} = cfg;
     end
 
+    if opt.verify
+        preflight(names_all, configs, opt, root);
+        return;
+    end
+
     print_plan(names_all, names, lo, hi, configs, opt, root);
     if opt.dry_run
+        return;
+    end
+
+    % 'driver' is this same function spawning one child process per chunk. It
+    % must return before the pool below is created: the parent holds no workers
+    % while a child is running, so the child gets the whole machine.
+    if opt.driver
+        drive_chunks(names_all, configs, opt, root);
         return;
     end
 
@@ -215,6 +262,7 @@ function opt = parse_options(args)
     p.FunctionName = 'main_cec2022';
     addParameter(p, 'experiments',  {'cec2022_10', 'cec2022_20'});
     addParameter(p, 'algorithms',   {});
+    addParameter(p, 'pool',         'default');
     addParameter(p, 'runs',         21);
     addParameter(p, 'samples',      1000);
     addParameter(p, 'chunk',        []);
@@ -222,6 +270,9 @@ function opt = parse_options(args)
     addParameter(p, 'workers',      feature('numcores'));
     addParameter(p, 'results_root', 'results');
     addParameter(p, 'dry_run',      false);
+    addParameter(p, 'verify',       false);
+    addParameter(p, 'driver',       false);
+    addParameter(p, 'attempts',     3);
     parse(p, args{:});
     opt = p.Results;
 
@@ -232,8 +283,17 @@ function opt = parse_options(args)
         opt.algorithms = cellstr(opt.algorithms);
     end
     opt.experiments  = cellstr(opt.experiments);
+    opt.pool         = lower(char(opt.pool));
     opt.results_root = char(opt.results_root);
     opt.dry_run      = logical(opt.dry_run);
+    opt.verify       = logical(opt.verify);
+    opt.driver       = logical(opt.driver);
+    opt.attempts     = max(1, round(double(opt.attempts)));
+
+    if opt.driver && ~isempty(opt.chunk)
+        error('main_cec2022:driverChunk', ...
+              '''driver'' spawns every chunk itself; do not also pass ''chunk''.');
+    end
 
     for e = 1:numel(opt.experiments)
         if ~startsWith(lower(opt.experiments{e}), 'cec2022')
@@ -248,26 +308,62 @@ function names = resolve_algorithms(opt, root)
     if ~isempty(opt.algorithms)
         names = opt.algorithms(:).';
     else
-        names = default_pool();
+        names = pool_by_name(opt.pool, root);
     end
 
     % MATLAB gives the current folder precedence over the path, so an
     % old-signature copy of an algorithm left in the repo root is what feval
     % would call. Catch it here rather than as "Too many output arguments"
     % three hours into a chunk.
-    alg_dir = fullfile(root, 'algorithm');
+    dirs = {fullfile(root, 'algorithm'), fullfile(root, 'proposed')};
     for k = 1:numel(names)
         w = which(names{k});
         if isempty(w)
             error('main_cec2022:unknownAlgorithm', ...
-                  '"%s" is not a function on the path (see algorithm/).', names{k});
+                  '"%s" is not a function on the path (see algorithm/ and proposed/).', ...
+                  names{k});
         end
-        if ~strcmpi(fileparts(w), alg_dir)
+        if ~any(strcmpi(fileparts(w), dirs))
             error('main_cec2022:shadowed', ...
-                  '"%s" resolves to %s, not algorithm/. Remove the shadowing copy.', ...
+                  '"%s" resolves to %s, not algorithm/ or proposed/. Remove the shadowing copy.', ...
                   names{k}, w);
         end
     end
+end
+
+function names = pool_by_name(pool, root)
+    switch pool
+        case 'default'
+            names = default_pool();
+        case 'proposed'
+            names = proposed_pool(root);
+        case 'fdb'
+            names = [fdb_bases(root), proposed_pool(root)];
+        case 'all'
+            names = unique([default_pool(), proposed_pool(root)], 'stable');
+        otherwise
+            error('main_cec2022:unknownPool', ...
+                  '"%s" is not a pool name (default | proposed | fdb | all).', pool);
+    end
+end
+
+function names = proposed_pool(root)
+% Every FDB variant in proposed/. The names sort alphabetically by base
+% algorithm and then by case number, which is also the order of the case table
+% in proposed/README.md. Case numbers stop at 5, so a plain sort is enough.
+    d = dir(fullfile(root, 'proposed', 'fdb_*_c*.m'));
+    if isempty(d)
+        error('main_cec2022:emptyProposed', ...
+              'proposed/ holds no fdb_*_c*.m files. Run tools/make_fdb_variants.py.');
+    end
+    names = sort(erase({d.name}, '.m'));
+end
+
+function names = fdb_bases(root)
+% The base algorithm behind every variant in proposed/, deduplicated. Included
+% in the 'fdb' pool so a study that cannot reuse an existing baseline run --
+% a different seed count, a different suite -- produces its own.
+    names = unique(regexprep(proposed_pool(root), '^fdb_(.*)_c\d+$', '$1'), 'stable');
 end
 
 function names = default_pool()
@@ -404,6 +500,340 @@ function write_marker(alg_dir, pipeline_id, stamp)
 end
 
 % ======================================================================= %
+% preflight
+% ======================================================================= %
+
+function preflight(names_all, configs, opt, root)
+% Everything that can go wrong on a fresh machine, checked in under a minute,
+% before a sweep that runs for days. Each check throws on failure and returns a
+% one-line summary on success; a failing preflight ends in an error so
+% `matlab -batch` exits non-zero.
+%
+% The end-to-end check is the one that earns its keep: it does not just call the
+% algorithm, it goes through save_run and then RE-EVALUATES the best_solution
+% that landed on disk against the best_fitness stored beside it. That pairing is
+% what the campaign's own verifier checks afterwards, and finding it broken here
+% costs a minute instead of a week.
+    fprintf('\n=== main_cec2022 preflight ===\n');
+    fprintf('%-16s %s\n',   'repo', root);
+    fprintf('%-16s %s, %s\n', 'matlab', version('-release'), computer);
+    fprintf('%-16s %d requested of %d cores\n', 'workers', opt.workers, feature('numcores'));
+    fprintf('%-16s %s\n\n', 'results root', opt.results_root);
+
+    checks = { ...
+        'pool',        @() chk_pool(names_all, root); ...
+        'benchmark',   @() chk_benchmark(configs); ...
+        'fdb selector', @() chk_selector(names_all); ...
+        'end to end',  @() chk_end_to_end(names_all, configs); ...
+        'parallel',    @() chk_parallel(opt, root); ...
+        'disk',        @() chk_disk(names_all, configs, opt, root)};
+
+    bad = 0;
+    for k = 1:size(checks, 1)
+        try
+            msg = checks{k, 2}();
+            fprintf('  PASS  %-14s %s\n', checks{k, 1}, msg);
+        catch ME
+            fprintf('  FAIL  %-14s %s\n', checks{k, 1}, ...
+                    strrep(ME.message, newline, ' '));
+            bad = bad + 1;
+        end
+    end
+
+    if bad > 0
+        fprintf('\nPREFLIGHT FAILED: %d of %d checks.\n\n', bad, size(checks, 1));
+        error('main_cec2022:preflight', '%d preflight check(s) failed.', bad);
+    end
+    fprintf('\nPREFLIGHT OK. Start the sweep with:\n');
+    fprintf('  main_cec2022(''pool'', ''%s'', ''driver'', true)\n\n', opt.pool);
+end
+
+function msg = chk_pool(names_all, root)
+% resolve_algorithms has already rejected a missing or shadowed name, so this
+% only has to describe what the pool turned out to be.
+    prop = fullfile(root, 'proposed');
+    n_var = 0;
+    for k = 1:numel(names_all)
+        if strcmpi(fileparts(which(names_all{k})), prop)
+            n_var = n_var + 1;
+        end
+    end
+    msg = sprintf('%d algorithms: %d from proposed/, %d from algorithm/', ...
+                  numel(names_all), n_var, numel(names_all) - n_var);
+end
+
+function msg = chk_benchmark(configs)
+% The mex, the cd into problem/CEC2022 that calculate_fitness does, and the
+% optimum table, on every function of every configured dimension.
+    for e = 1:numel(configs)
+        cfg = configs{e};
+        for fn = cfg.function_numbers
+            problem = struct('dimension', cfg.dimensions, ...
+                             'lb', cfg.bounds(1) * ones(1, cfg.dimensions), ...
+                             'ub', cfg.bounds(2) * ones(1, cfg.dimensions), ...
+                             'maxFe', 10, 'fhd', str2func('cec22_func'), 'number', fn);
+            calculate_fitness('reset');
+            x = zeros(cfg.dimensions, 1);
+            [f, ~] = calculate_fitness(x, problem, 0);
+            if ~isscalar(f) || ~isfinite(f)
+                error('main_cec2022:benchmark', ...
+                      '%s F%d returned %s at the origin.', cfg.name, fn, mat2str(f));
+            end
+            g = get_global_minimum(cfg.name, fn);
+            if ~isscalar(g) || ~isfinite(g)
+                error('main_cec2022:benchmark', ...
+                      'get_global_minimum(%s, %d) returned %s.', cfg.name, fn, mat2str(g));
+            end
+        end
+    end
+    calculate_fitness('reset');
+    msg = sprintf('%d functions evaluate on %d dimension(s)', ...
+                  numel(configs{1}.function_numbers), numel(configs));
+end
+
+function msg = chk_selector(names_all)
+% The FDB score the variants call must agree with the repository's reference
+% implementation. Skipped when the pool holds no variants.
+    if ~any(startsWith(names_all, 'fdb_'))
+        msg = 'no FDB variants in this pool, skipped';
+        return;
+    end
+    if isempty(which('fdb_index')) || isempty(which('fitnessDistanceBalance'))
+        error('main_cec2022:selector', ...
+              'fdb_index or fitnessDistanceBalance is not on the path.');
+    end
+    rng(1, 'twister');
+    for t = 1:500
+        n = randi([2 30]);
+        d = randi([1 20]);
+        P = randn(n, d) * 50;
+        f = randn(n, 1) * 10;
+        if rand < 0.2
+            f(:) = f(1);       % flat fitness: both must fall back to a random pick
+        end
+        s = rng;
+        a = fitnessDistanceBalance(P, f);
+        rng(s);
+        b = fdb_index(P, f);
+        if a ~= b
+            error('main_cec2022:selector', ...
+                  'fdb_index disagrees with fitnessDistanceBalance at n=%d, d=%d.', n, d);
+        end
+    end
+    msg = 'fdb_index matches fitnessDistanceBalance on 500 draws';
+end
+
+function msg = chk_end_to_end(names_all, configs)
+% Two variants through the whole recorder and save_run at a token budget, into
+% a scratch folder that is deleted afterwards.
+    probe = unique(names_all([1, numel(names_all)]), 'stable');
+    cfg = configs{1};
+    tmp = fullfile(tempdir, sprintf('main_cec2022_preflight_%s', timestamp()));
+    cleanup = onCleanup(@() rmdir_safe(tmp));
+
+    for k = 1:numel(probe)
+        problem = struct('dimension', cfg.dimensions, ...
+                         'lb', cfg.bounds(1) * ones(1, cfg.dimensions), ...
+                         'ub', cfg.bounds(2) * ones(1, cfg.dimensions), ...
+                         'maxFe', 2000, 'fhd', str2func('cec22_func'), 'number', 1, ...
+                         'results_root', tmp);
+        rng(1, 'twister');
+        calculate_fitness('reset');
+        record_history('set_samples', 50);
+        record_history('set_problem', problem);
+        save_run('set_provenance', struct('pipeline_id', 'preflight', ...
+                                          'pipeline_commit', 'none'));
+
+        t0 = tic;
+        [bf, bx, curve, ph, fh] = feval(probe{k}, problem);
+        save_run(probe{k}, 1, 1, bf, bx, curve, toc(t0), problem, cfg.name, ...
+                 ph, fh, bf - get_global_minimum(cfg.name, 1), 1, true);
+
+        info = fullfile(tmp, probe{k}, cfg.name, 'F1', 'run1', 'run_info.mat');
+        d = dir(info);
+        if isempty(d) || d.bytes == 0
+            error('main_cec2022:endToEnd', '%s wrote no run_info.mat.', probe{k});
+        end
+        S = load(info);
+        ri = S.run_info;
+        if ri.n_history_rows < 1
+            error('main_cec2022:endToEnd', '%s recorded no history rows.', probe{k});
+        end
+
+        % The reported pair must hold: re-evaluate the stored solution.
+        best = load(fullfile(tmp, probe{k}, cfg.name, 'F1', 'run1', 'best_solution.mat'));
+        xs = best.best_solution;
+        if ~all(isfinite(xs)) || numel(xs) ~= cfg.dimensions
+            error('main_cec2022:endToEnd', ...
+                  '%s stored a best_solution that is not %d finite numbers.', ...
+                  probe{k}, cfg.dimensions);
+        end
+        calculate_fitness('reset');
+        [f_again, ~] = calculate_fitness(xs(:), problem, 0);
+        if abs(f_again - ri.best_fitness) > 1e-6 * max(1, abs(ri.best_fitness))
+            error('main_cec2022:endToEnd', ...
+                  '%s reported %.10g but its best_solution scores %.10g.', ...
+                  probe{k}, ri.best_fitness, f_again);
+        end
+    end
+    calculate_fitness('reset');
+    msg = sprintf('%s wrote and re-evaluate consistently', strjoin(probe, ', '));
+end
+
+function msg = chk_parallel(opt, root)
+% A pool of the requested size, with its workers in the repository root -- the
+% one thing that makes calculate_fitness cd somewhere else on a worker.
+    pool = gcp('nocreate');
+    if ~isempty(pool) && pool.NumWorkers ~= opt.workers
+        delete(pool);
+        pool = [];
+    end
+    if isempty(pool)
+        pool = parpool('local', opt.workers);
+    end
+    wait(parfevalOnAll(pool, @cd, 0, root));
+    f = parfevalOnAll(pool, @pwd, 1);
+    wait(f);
+    % fetchOutputs concatenates char outputs into a NumWorkers-by-len matrix,
+    % and unique() on that returns unique CHARACTERS, not unique paths.
+    cwds = unique(cellstr(fetchOutputs(f)));
+    n = pool.NumWorkers;
+    delete(pool);
+    if numel(cwds) ~= 1 || ~strcmpi(cwds{1}, root)
+        error('main_cec2022:parallel', 'Workers are not all in %s.', root);
+    end
+    msg = sprintf('%d workers start and sit in the repository root', n);
+end
+
+function msg = chk_disk(names_all, configs, opt, root)
+    bytes_est = 0;
+    for e = 1:numel(configs)
+        cfg = configs{e};
+        nr = numel(cfg.function_numbers) * cfg.runs_per_experiment * numel(names_all);
+        bytes_est = bytes_est + nr * est_run_bytes(cfg.dimensions, opt.samples);
+    end
+    free = free_bytes(root);
+    if isnan(free)
+        error('main_cec2022:disk', 'Cannot read the free space on this volume.');
+    end
+    if free < bytes_est * 1.2
+        error('main_cec2022:disk', ...
+              'modelled %s, only %s free -- halve ''samples'' or free space.', ...
+              bytes(bytes_est), bytes(free));
+    end
+    msg = sprintf('%s modelled, %s free', bytes(bytes_est), bytes(free));
+end
+
+function rmdir_safe(p)
+    if exist(p, 'dir')
+        try
+            rmdir(p, 's');
+        catch
+        end
+    end
+end
+
+% ======================================================================= %
+% driver: one process per chunk
+% ======================================================================= %
+
+function drive_chunks(names_all, configs, opt, root)
+% Runs the whole campaign from one call by spawning a fresh MATLAB per chunk.
+%
+% Separate processes are the point, not an implementation detail: one process
+% that runs the pool back to back dies intermittently with an uncatchable
+% access violation after ~145 algorithms, which no try/catch can see. A chunk
+% that dies takes only the runs that were in flight, because every chunk
+% resumes from what is already on disk -- which is also why simply retrying it
+% works, and why rerunning this whole command after a reboot is safe.
+%
+% Experiments are the OUTER loop, so the pool finishes at the smaller dimension
+% before anything starts at the larger one and there is a complete table to
+% look at early.
+    exe = fullfile(matlabroot, 'bin', 'matlab');
+    if ispc
+        exe = [exe '.exe'];
+    end
+    if ~exist(exe, 'file')
+        error('main_cec2022:noMatlabExe', 'No MATLAB executable at %s.', exe);
+    end
+
+    log_dir = fullfile(root, 'logs');
+    if ~exist(log_dir, 'dir')
+        mkdir(log_dir);
+    end
+    drv = fullfile(log_dir, sprintf('cec2022_driver_%s.log', timestamp()));
+
+    starts = 1:opt.chunk_size:numel(names_all);
+    nchunk = numel(configs) * numel(starts);
+    logline(drv, 'DRIVER pool=%s | %d chunks = %d experiment(s) x %d of %d | %d workers | up to %d attempts each', ...
+            opt.pool, nchunk, numel(configs), numel(starts), opt.chunk_size, ...
+            opt.workers, opt.attempts);
+
+    t0 = tic;
+    done = 0;
+    failed = {};
+    for e = 1:numel(configs)
+        for s = 1:numel(starts)
+            lo = starts(s);
+            hi = min(lo + opt.chunk_size - 1, numel(names_all));
+            cmd = sprintf('"%s" -batch "%s"', exe, ...
+                          child_call(opt, configs{e}.name, lo, hi));
+            done = done + 1;
+            st = -1;
+            for attempt = 1:opt.attempts
+                logline(drv, '[%2d/%2d] %s %d-%d attempt %d of %d', done, nchunk, ...
+                        configs{e}.name, lo, hi, attempt, opt.attempts);
+                ct = tic;
+                st = system(cmd);
+                if st == 0
+                    logline(drv, '[%2d/%2d] %s %d-%d OK in %s', done, nchunk, ...
+                            configs{e}.name, lo, hi, dur(toc(ct)));
+                    break;
+                end
+                logline(drv, '[%2d/%2d] %s %d-%d exit %d after %s -- retrying, it resumes', ...
+                        done, nchunk, configs{e}.name, lo, hi, st, dur(toc(ct)));
+            end
+            if st ~= 0
+                failed{end + 1} = sprintf('%s %d-%d', configs{e}.name, lo, hi); %#ok<AGROW>
+            end
+        end
+    end
+
+    fprintf('\nDriver log: %s\n', drv);
+    if isempty(failed)
+        logline(drv, 'DRIVER DONE %d chunks in %s, every chunk exited clean', ...
+                nchunk, dur(toc(t0)));
+        return;
+    end
+    logline(drv, 'DRIVER DONE %d chunks in %s, %d still failing after %d attempts:', ...
+            nchunk, dur(toc(t0)), numel(failed), opt.attempts);
+    for k = 1:numel(failed)
+        logline(drv, '  %s', failed{k});
+    end
+    error('main_cec2022:chunksFailed', ...
+          '%d of %d chunks failed; rerun the same command to resume them.', ...
+          numel(failed), nchunk);
+end
+
+function code = child_call(opt, expname, lo, hi)
+% The child's argument list. Everything the parent was told is passed on, so a
+% child never re-reads a default the parent overrode.
+    q = @(s) strrep(char(s), '''', '''''');
+    if isempty(opt.algorithms)
+        who = sprintf('''pool'', ''%s''', q(opt.pool));
+    else
+        parts = cellfun(@(a) ['''' q(a) ''''], opt.algorithms, 'UniformOutput', false);
+        who = sprintf('''algorithms'', {%s}', strjoin(parts, ', '));
+    end
+    code = sprintf(['main_cec2022(%s, ''experiments'', {''%s''}, ''chunk'', [%d %d], ' ...
+                    '''runs'', %d, ''samples'', %d, ''workers'', %d, ' ...
+                    '''results_root'', ''%s'')'], ...
+                   who, q(expname), lo, hi, opt.runs, opt.samples, opt.workers, ...
+                   q(opt.results_root));
+end
+
+% ======================================================================= %
 % plan and cost model
 % ======================================================================= %
 
@@ -414,8 +844,13 @@ function print_plan(names_all, names, lo, hi, configs, opt, root)
 % They price a typical pool member; alo alone is ~1.08e-5 s per unit of D*maxFE
 % (21 s/run at D=10, 216 s at D=20), so it dominates its own share.
     fprintf('\n=== main_cec2022 plan ===\n');
-    fprintf('Pool          : %d algorithms, running %d-%d (%d)\n', ...
-            numel(names_all), lo, hi, numel(names));
+    if isempty(opt.algorithms)
+        pool_label = opt.pool;
+    else
+        pool_label = 'explicit list';
+    end
+    fprintf('Pool          : %s, %d algorithms, running %d-%d (%d)\n', ...
+            pool_label, numel(names_all), lo, hi, numel(names));
     fprintf('Runs per func : %d      History samples: %d\n', opt.runs, opt.samples);
     fprintf('Results root  : %s\n\n', opt.results_root);
 
@@ -469,18 +904,61 @@ function print_plan(names_all, names, lo, hi, configs, opt, root)
     end
 
     if opt.dry_run
-        fprintf('\n--- chunked driver (bash), chunk_size = %d ---\n', opt.chunk_size);
-        fprintf('for lo in');
-        for k = 1:opt.chunk_size:numel(names_all)
-            fprintf(' %d', k);
-        end
-        fprintf('; do\n');
-        fprintf('  matlab -batch "main_cec2022(''chunk'', [$lo, $((lo+%d))])"\n', opt.chunk_size - 1);
-        fprintf('done\n');
+        print_driver(names_all, configs, opt);
         fprintf('\nDry run: nothing was executed.\n\n');
     else
         fprintf('\n');
     end
+end
+
+function print_driver(names_all, configs, opt)
+% The command list a run machine actually types. Two loops, and both matter.
+%
+% The OUTER loop is over experiments, not inside the sweep, so the whole pool
+% finishes at D = 10 before anything starts at D = 20. The driver's own loop is
+% experiment-inside-algorithm, which would instead leave every algorithm half
+% done until the very end and nothing analysable in between; at this grid the
+% D = 10 pass is about an eighth of the total wall clock.
+%
+% The INNER loop is separate PROCESSES, not a chunk argument the sweep could
+% iterate itself. A single MATLAB process that runs the whole pool back to back
+% dies intermittently with an uncatchable access violation after ~145
+% algorithms -- accumulated process state, not any one algorithm. Every chunk
+% resumes from what is on disk, so a chunk that dies costs only the runs that
+% were in flight, and rerunning the same lines picks up where it stopped.
+    if strcmp(opt.pool, 'default')
+        pool_arg = '';
+    else
+        pool_arg = sprintf('''pool'', ''%s'', ', opt.pool);
+    end
+
+    fprintf('\n--- driver, chunk_size = %d (bash; cmd users: see below) ---\n', ...
+            opt.chunk_size);
+    fprintf('for exp in');
+    for e = 1:numel(configs)
+        fprintf(' %s', configs{e}.name);
+    end
+    fprintf('; do\n  for lo in');
+    for k = 1:opt.chunk_size:numel(names_all)
+        fprintf(' %d', k);
+    end
+    fprintf('; do\n');
+    fprintf(['    matlab -batch "main_cec2022(%s''experiments'', {''$exp''}, ' ...
+             '''chunk'', [$lo, $((lo+%d))])"\n'], pool_arg, opt.chunk_size - 1);
+    fprintf('  done\ndone\n');
+
+    fprintf('\n--- the same thing as a .bat ---\n');
+    fprintf('for %%%%E in (');
+    for e = 1:numel(configs)
+        fprintf(' %s', configs{e}.name);
+    end
+    fprintf(' ) do for %%%%L in (');
+    for k = 1:opt.chunk_size:numel(names_all)
+        fprintf(' %d', k);
+    end
+    fprintf([' ) do matlab -batch "main_cec2022(%s''experiments'', ' ...
+             '{''%%%%E''}, ''chunk'', [%%%%L, %%%%L+%d])"\n'], ...
+            pool_arg, opt.chunk_size - 1);
 end
 
 function s = est_run_seconds(D, maxFe, samples)
