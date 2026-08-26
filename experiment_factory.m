@@ -9,6 +9,7 @@ function experiment_config = experiment_factory(experiment_name)
     experiment_config.function_numbers = [];
     experiment_config.runs_per_experiment = 51;
     experiment_config.bounds = [-100, 100];
+    experiment_config.par_func = '';
 
     switch lower(experiment_name)
 
@@ -139,17 +140,38 @@ function experiment_config = experiment_factory(experiment_name)
             experiment_config.bounds = [-100, 100];
 
         case 'cec2020rw'
-            % Dimension, box and budget are per problem; main.m reads them from
-            % Cal_par and derives maxFe from the dimension.
+            % Dimension, box and budget are per problem; suite_problem reads them
+            % from par_func and, because maxFE is 0 here, derives the budget from
+            % the dimension ladder the guidelines set.
             experiment_config.description = 'CEC2020 Real-World Constrained Optimization Problems';
             experiment_config.dimensions = 0;
             experiment_config.function_numbers = 1:57;
             experiment_config.maxFE = 0;
             experiment_config.bounds = [0, 0];
             experiment_config.use_cal_par = true;
+            experiment_config.par_func = 'Cal_par';
+
+        case 'cedp'
+            % The ten constrained engineering design problems the metaheuristic
+            % literature reports most often, in the formulations their published
+            % optima belong to (problem/CEDP/cedp_par.m lists both).
+            %
+            % Dimension and box are per problem, the budget is NOT: at D = 2..11
+            % the dimension ladder would hand a 2-variable truss the same 1e5 FEs
+            % as an 11-variable one, and every algorithm would sit on the optimum
+            % for most of the run. 15 000 FEs is the budget the sources these
+            % problems come from use, and it is what keeps the comparison
+            % discriminating.
+            experiment_config.description = 'Constrained engineering design problems';
+            experiment_config.dimensions = 0;
+            experiment_config.function_numbers = 1:10;
+            experiment_config.maxFE = 15000;
+            experiment_config.bounds = [0, 0];
+            experiment_config.use_cal_par = true;
+            experiment_config.par_func = 'cedp_par';
 
         otherwise
-            error('Unknown experiment name: %s\nAvailable experiments:\n  CEC2014: cec2014_10, cec2014_30, cec2014_50, cec2014_100\n  CEC2017: cec2017_10, cec2017_30, cec2017_50, cec2017_100\n  CEC2020: cec2020_5, cec2020_10, cec2020_15, cec2020_20\n  CEC2020RW: cec2020rw\n  CEC2021: cec2021_10, cec2021_20\n  CEC2022: cec2022_10, cec2022_20', experiment_name);
+            error('Unknown experiment name: %s\nAvailable experiments:\n  CEC2014: cec2014_10, cec2014_30, cec2014_50, cec2014_100\n  CEC2017: cec2017_10, cec2017_30, cec2017_50, cec2017_100\n  CEC2020: cec2020_5, cec2020_10, cec2020_15, cec2020_20\n  CEC2020RW: cec2020rw\n  CEDP: cedp\n  CEC2021: cec2021_10, cec2021_20\n  CEC2022: cec2022_10, cec2022_20', experiment_name);
     end
 
 end

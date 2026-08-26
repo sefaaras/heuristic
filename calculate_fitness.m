@@ -1,9 +1,10 @@
 function [fitness, FE, is_feasible, violation, objective, max_violation] = calculate_fitness(solutions, problem, FE, count_this)
 % The only evaluator. solutions is D x ps (one column per candidate).
 %
-%   fitness       value the SEARCH minimises; on CEC2020RW this folds in the
-%                 constraints. Row for the numeric suites, column for
-%                 CEC2020RW -- each suite's own convention is preserved
+%   fitness       value the SEARCH minimises; on a constrained suite
+%                 (CEC2020RW, CEDP) this folds in the constraints. Row for
+%                 the numeric suites, column for those two -- each suite's own
+%                 convention is preserved
 %   FE            updated counter, returned UNCHANGED when count_this is false
 %   is_feasible   true where violation == 0
 %   violation     mean constraint violation v(x), 0 for unconstrained suites
@@ -15,12 +16,12 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
 % run (main.m does it), or a parfor worker carries one job's state into the next.
 % calculate_fitness('stats') returns the counters accumulated since that reset.
 
-    persistent lastFhd lastNum lastDim lastIsRW worstObjective nIneq nEq runStats
+    persistent lastFhd lastNum lastDim lastIsCon worstObjective nIneq nEq runStats
 
     if ischar(solutions) || isstring(solutions)
         switch lower(char(solutions))
             case 'reset'
-                lastFhd = []; lastNum = []; lastDim = []; lastIsRW = [];
+                lastFhd = []; lastNum = []; lastDim = []; lastIsCon = [];
                 worstObjective = []; nIneq = []; nEq = [];
                 runStats = new_stats();
                 clear('cec20rw_func');   % drop its persistent G/B/P/Q/initial_flags
@@ -33,7 +34,7 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
                 end
                 runStats.n_ineq = nIneq;
                 runStats.n_eq   = nEq;
-                runStats.is_rw  = ~isempty(lastIsRW) && lastIsRW;
+                runStats.is_rw  = ~isempty(lastIsCon) && lastIsCon;
                 fitness = runStats;
                 FE = 0; is_feasible = []; violation = []; objective = [];
                 max_violation = [];
@@ -60,16 +61,21 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
         % The CEC routine reads input_data from the current folder, so cd there
         % for the first evaluation of this (function, dimension).
         fname = func2str(problem.fhd);
-        lastIsRW = contains(fname, 'cec20rw');
+        isRW = contains(fname, 'cec20rw');
+        isCedp = contains(fname, 'cedp');
+        lastIsCon = isRW || isCedp;   % suites that return [f, g, h]
 
         originalDir = pwd;
         restoreDir = onCleanup(@() cd(originalDir));  % restore cwd on return/error
 
+        % CEDP is absent here on purpose: it is pure MATLAB and reads no
+        % input_data, so it needs no cd -- unlike the MEX suites, which load
+        % their shift and rotation data from the current folder.
         if contains(fname, 'cec14')
             cd('problem/CEC2014');
         elseif contains(fname, 'cec17')
             cd('problem/CEC2017');
-        elseif lastIsRW
+        elseif isRW
             cd('problem/CEC2020RW');
         elseif contains(fname, 'cec20')
             cd('problem/CEC2020');
@@ -79,10 +85,14 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
             cd('problem/CEC2022');
         end
 
-        if lastIsRW
+        if isRW
             clear('cec20rw_func');
 
             par = Cal_par(problem.number);
+            nIneq = par.g;
+            nEq   = par.h;
+        elseif isCedp
+            par = cedp_par(problem.number);
             nIneq = par.g;
             nEq   = par.h;
         end
@@ -90,13 +100,13 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
         refBefore = worstObjective;
 
         [fitness, is_feasible, violation, objective, worstObjective, max_violation] = ...
-            eval_core(solutions, problem, lastIsRW, worstObjective, nIneq, nEq);
+            eval_core(solutions, problem, lastIsCon, worstObjective, nIneq, nEq);
 
         lastFhd = problem.fhd; lastNum = problem.number; lastDim = D;
     else
         refBefore = worstObjective;
         [fitness, is_feasible, violation, objective, worstObjective, max_violation] = ...
-            eval_core(solutions, problem, lastIsRW, worstObjective, nIneq, nEq);
+            eval_core(solutions, problem, lastIsCon, worstObjective, nIneq, nEq);
     end
 
     if count_this
@@ -159,12 +169,12 @@ function s = accumulate(s, is_feasible, violation, objective, num_evaluations)
 end
 
 function [fitness, is_feasible, violation, objective, worstObjective, max_violation] = ...
-        eval_core(solutions, problem, isRW, worstObjective, nIneq, nEq)
+        eval_core(solutions, problem, isCon, worstObjective, nIneq, nEq)
 % Assumes the working directory is already correct if the routine still has data
 % to read.
     ps = size(solutions, 2);
 
-    if ~isRW
+    if ~isCon
         fitness = feval(problem.fhd, solutions, problem.number);
         is_feasible = true(size(fitness));
         violation = zeros(size(fitness));
@@ -173,7 +183,7 @@ function [fitness, is_feasible, violation, objective, worstObjective, max_violat
         return;
     end
 
-    % CEC2020RW returns [f, g, h] and expects solutions as row vectors.
+    % A constrained suite returns [f, g, h] and expects solutions as row vectors.
     if isfield(problem, 'lb') && isfield(problem, 'ub') ...
             && ~isempty(problem.lb) && ~isempty(problem.ub)
         lb = problem.lb(:);   % D x 1
@@ -247,6 +257,18 @@ end
 
 function C = pick_constraints(c, n, ps)
 % Return the real constraints as nc x ps.
+%
+% Every suite here hands them over that way already -- cec20rw_func ends on
+% `g=g'; h=h';` and cedp_func does the same -- so the nc x ps reading is
+% tried first and the transpose is only a fallback for a block that does not
+% match it. The order matters exactly when a batch holds as many candidates as
+% the problem has constraints: both readings fit a square block, and reading it
+% the wrong way hands every candidate another one's constraints. That case is
+% not rare, it is where the LPSR families spend their last generations.
+%
+% n is the count from the par table and is not always right -- CEC2020RW's own
+% Cal_par miscounts RC17, RC21 and RC44 -- so it is used to confirm a reading,
+% never as the only test.
     if n == 0 || isempty(c)
         C = zeros(0, ps);
     elseif size(c, 2) == ps

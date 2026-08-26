@@ -259,14 +259,16 @@ function S = pop_constraints(X, f, prob)
 % objective and the feasibility flag TOGETHER, and the elite ranking needs both
 % again. The raw objective comes free, as one of calculate_fitness's outputs.
 %
-% Off CEC2020RW there is nothing to read -- f IS the objective, everything is
-% feasible and every violation is 0 -- and the call is skipped entirely.
+% Off a constrained suite there is nothing to read -- f IS the objective,
+% everything is feasible and every violation is 0 -- and the call is skipped
+% entirely. is_rw below reads "this suite has constraints"; the name predates
+% CEDP and is kept so the stored metric columns keep their meaning.
     N = size(X, 1);
     S = struct('obj', double(f(:)), 'feas', ones(N, 1), 'viol', zeros(N, 1), ...
                'vmax', zeros(N, 1), 'is_rw', false);
     if isempty(prob) || ~isstruct(prob) || ~isfield(prob, 'fhd') ...
             || ~isfield(prob, 'dimension') || prob.dimension ~= size(X, 2) ...
-            || ~contains(func2str(prob.fhd), 'cec20rw')
+            || ~contains(func2str(prob.fhd), {'cec20rw', 'cedp'})
         return;
     end
     S.is_rw = true;
@@ -285,8 +287,8 @@ function S = pop_constraints(X, f, prob)
 end
 
 function [key, grp] = elite_key(f, S)
-% Ranking behind the elite columns: plain fitness off CEC2020RW, feasibility
-% first on it. grp is 0 for feasible and 1 for infeasible so that the pair sorts
+% Ranking behind the elite columns: plain fitness off a constrained suite,
+% feasibility first on one. grp is 0 for feasible and 1 for infeasible so that the pair sorts
 % lexicographically -- feasible individuals then rank by RAW objective and
 % infeasible ones by violation, the order the competition guidelines use. A
 % non-finite key is pushed to +Inf so an individual the evaluator could not score

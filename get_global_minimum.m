@@ -1,7 +1,9 @@
 function global_min = get_global_minimum(experiment_name, func_num)
 % Known global minimum of a CEC problem, e.g. get_global_minimum('cec2014_30', 1).
-% On CEC2020RW it is the best known FEASIBLE objective from the literature, not a
-% proven optimum.
+% On CEC2020RW and CEDP it is the best known FEASIBLE objective from the
+% literature, not a proven optimum -- and on those two suites nothing in the
+% pipeline scores a run against it, because the value the search minimises folds
+% in a run-private constraint reference. It is here for reporting only.
 
 if contains(experiment_name, 'cec2014')
     competition = 'CEC2014';
@@ -9,6 +11,8 @@ elseif contains(experiment_name, 'cec2017')
     competition = 'CEC2017';
 elseif contains(experiment_name, 'cec2020rw')
     competition = 'CEC2020RW';
+elseif strcmpi(experiment_name, 'cedp')
+    competition = 'CEDP';
 elseif contains(experiment_name, 'cec2020')
     competition = 'CEC2020';
 elseif contains(experiment_name, 'cec2021')
@@ -20,6 +24,10 @@ else
 end
 
 switch upper(competition)
+    case 'CEDP'
+        par = cedp_par(func_num);
+        global_min = par.best_known;
+
     case 'CEC2014'
         if func_num >= 1 && func_num <= 30
             global_min = func_num * 100;

@@ -17,6 +17,7 @@ addpath('problem/CEC2014');
 addpath('problem/CEC2017');
 addpath('problem/CEC2020');
 addpath('problem/CEC2020RW');
+addpath('problem/CEDP');
 addpath('problem/CEC2021');
 addpath('problem/CEC2022');
 
@@ -60,6 +61,7 @@ all_experiments = {
     'cec2017_10', 'cec2017_30', 'cec2017_50', 'cec2017_100', ...
     'cec2020_5', 'cec2020_10', 'cec2020_15', 'cec2020_20', ...
     'cec2020rw', ...
+    'cedp', ...
     'cec2021_10', 'cec2021_20', ...
     'cec2022_10', 'cec2022_20'
 };
@@ -187,54 +189,16 @@ parfor job_idx = 1:remaining_jobs
         % Seed = run index, so run k repeats identically across every experiment.
         rng(job.run, 'twister');
 
-        problem = struct();
-
-        if contains(job.experiment_name, 'cec2014')
-            problem.fhd = str2func('cec14_func');
-        elseif contains(job.experiment_name, 'cec2017')
-            problem.fhd = str2func('cec17_func');
-        elseif contains(job.experiment_name, 'cec2020rw')
-            problem.fhd = str2func('cec20rw_func');
-        elseif contains(job.experiment_name, 'cec2020')
-            problem.fhd = str2func('cec20_func');
-        elseif contains(job.experiment_name, 'cec2021')
-            problem.fhd = str2func('cec21_bias_shift_rot_func');
-        elseif contains(job.experiment_name, 'cec2022')
-            problem.fhd = str2func('cec22_func');
-        end
-
-        if isfield(job.config, 'use_cal_par') && job.config.use_cal_par
-            par = Cal_par(job.func_num);
-            problem.dimension = par.n;
-            problem.lb = par.xmin;
-            problem.ub = par.xmax;
-
-            D = problem.dimension;
-            if D <= 10
-                problem.maxFe = 1 * 10^5;
-            elseif D <= 30
-                problem.maxFe = 2 * 10^5;
-            elseif D <= 50
-                problem.maxFe = 4 * 10^5;
-            elseif D <= 150
-                problem.maxFe = 8 * 10^5;
-            else
-                problem.maxFe = 10^6;
-            end
-        else
-            problem.dimension = job.config.dimensions;
-            problem.lb = job.config.bounds(1) * ones(1, job.config.dimensions);
-            problem.ub = job.config.bounds(2) * ones(1, job.config.dimensions);
-            problem.maxFe = job.config.maxFE;
-        end
-
-        problem.number = job.func_num;
+        % Evaluator, box and budget for this (experiment, function). Shared
+        % with redo_runs and verify_campaign so a repaired or verified run is
+        % measured against exactly the grid the campaign ran.
+        problem = suite_problem(job.experiment_name, job.func_num);
 
         fprintf('Running Job %d (of %d remaining): %s | %s | F%d | Run %d (seed=%d)\n', ...
                 job_idx, remaining_jobs, job.experiment_name, job.alg_name, ...
                 job.func_num, job.run, job.run);
 
-        % Drop the previous job's function, dimension and CEC2020RW constraint cache.
+        % Drop the previous job's function, dimension and constraint-suite cache.
         calculate_fitness('reset');
 
         % set_samples also drops the recorder's cached problem, so it comes first.
@@ -254,7 +218,7 @@ parfor job_idx = 1:remaining_jobs
         fprintf('Job %d (Exp:%s, Alg:%s, F%d, Run%d) completed in %.2f sec (fitness: %.6e)\n', ...
                 job.id, job.experiment_name, job.alg_name, job.func_num, job.run, exec_time, best_fitness);
 
-        if ~contains(job.experiment_name, 'cec2020rw')
+        if ~(contains(job.experiment_name, 'cec2020rw') || strcmpi(job.experiment_name, 'cedp'))
             global_min = get_global_minimum(job.experiment_name, job.func_num);
             best_error = best_fitness - global_min;
         else
@@ -262,7 +226,8 @@ parfor job_idx = 1:remaining_jobs
         end
 
         % Recover the raw f(x) and the mean violation v(x) of the reported solution.
-        if contains(job.experiment_name, 'cec2020rw')
+        % Constrained suites only: elsewhere f IS the objective and nothing is violated.
+        if contains(job.experiment_name, 'cec2020rw') || strcmpi(job.experiment_name, 'cedp')
             % count_this = false: an audit call must not enter the FE counters
             [~, ~, is_feasible, violation, objective, max_violation] = ...
                 calculate_fitness(best_solution(:), problem, 0, false);
@@ -277,7 +242,7 @@ parfor job_idx = 1:remaining_jobs
             max_violation = 0;
         end
 
-        if contains(job.experiment_name, 'cec2020rw')
+        if contains(job.experiment_name, 'cec2020rw') || strcmpi(job.experiment_name, 'cedp')
             save_run(job.alg_name, job.func_num, job.run, ...
                      best_fitness, best_solution, curve, ...
                      exec_time, problem, job.experiment_name, ...
