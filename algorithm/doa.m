@@ -18,12 +18,12 @@
 %     replaced by another individual's value, otherwise re-drawn uniformly
 %
 % Reference:
-% Yuxuan Lang, Yalong Gao,
+% Yifan Lang, Yuelin Gao,
 % Dream Optimization Algorithm (DOA): A novel metaheuristic optimization
 % algorithm inspired by human dreams and its applications to real-world
 % engineering problems,
 % Computer Methods in Applied Mechanics and Engineering 436 (2025) 117718.
-% https://doi.org/10.1016/j.cma.2025.117718
+% https://doi.org/10.1016/j.cma.2024.117718
 % ----------------------------------------------------------------------- %
 % Implementation Note:
 % DOA is steady-state: the memory strategy moves a whole dream group without
