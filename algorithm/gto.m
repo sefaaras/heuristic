@@ -20,6 +20,16 @@
 % International Journal of Intelligent Systems 36 (10) (2021) 5887-5958.
 % https://doi.org/10.1002/int.22535
 % ----------------------------------------------------------------------- %
+% Implementation Note:
+% The boundary repair also fires on a non-finite coordinate, redrawing it in its
+% own box. Exploitation phase 1 builds delta as (abs(mean(GX)).^g).^(1/g), an
+% identity whose intermediate power overflows: GX is written in place, so the
+% mean is taken over rows already amplified in this sweep, and on CEC2020RW F1
+% the dimension-5 column (ub = 2e6) reaches 2.3e109 by It = 1, where .^2.857 is
+% Inf. Inf is clamped, but Inf*0 -- a gorilla sitting on the Silverback in that
+% dimension -- gives NaN, which passes both x > ub and x < lb and so reached
+% best_solution in 9 campaign runs.
+% ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
@@ -180,7 +190,11 @@ end
 
 % Boundary handling
 function [X] = boundaryCheck(X, lb, ub)
+    lb = lb .* ones(1, size(X, 2));
+    ub = ub .* ones(1, size(X, 2));
     for i = 1:size(X, 1)
+        NF = ~isfinite(X(i, :));
+        X(i, NF) = rand(1, sum(NF)) .* (ub(NF) - lb(NF)) + lb(NF);
         FU = X(i, :) > ub;
         FL = X(i, :) < lb;
         X(i, :) = (X(i, :) .* (~(FU + FL))) + ub .* FU + lb .* FL;
