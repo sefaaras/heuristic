@@ -30,7 +30,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     N = 30;
 
     FE = 0;
-    curve = zeros(1, maxFE);
+    curve = nan(1, maxFE);
 
     population_history = [];  % record_history allocates the metric buffers on its first sample
     fitness_history = [];
@@ -198,8 +198,9 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         end
     end
 
+    % NaN marks a slot no evaluation reached; 0 is a legal fitness value
     for idx = 2:maxFE
-        if curve(idx) == 0
+        if isnan(curve(idx))
             curve(idx) = curve(idx - 1);
         end
     end
