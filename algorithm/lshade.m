@@ -19,6 +19,9 @@
 % Size Reduction, IEEE Congress on Evolutionary Computation (CEC), 2014, pp. 1658-1665
 % https://doi.org/10.1109/CEC.2014.6900380
 % ----------------------------------------------------------------------- %
+% Implementation Note:
+% bsf starts at Inf, not the reference's 1e+30 sentinel, which RC12 never beats.
+% ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
@@ -53,7 +56,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     [fitness, FE] = calculate_fitness(pop', problem, FE);
     fitness = fitness(:);  % Ensure column vector
 
-    bsf_fit_var = 1e+30;
+    bsf_fit_var = inf;
     bsf_solution = zeros(1, dim);
 
     for i = 1:pop_size

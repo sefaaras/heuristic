@@ -38,9 +38,9 @@
 % mean sits outside the population and the first (xmean - xold)/sigma drives sigma
 % to Inf, turning every CMA-ES offspring NaN by generation two. The eigen update
 % also floors the spectrum before the inverse square root, which the reference's
-% NaN/Inf/complex test on C does not cover for a real symmetric C that has drifted
-% indefinite. The eigenvalue matrix does not shadow D, which sampling reads as a
-% vector.
+% NaN/Inf/complex test does not cover for a drifted-indefinite real symmetric C.
+% The eigenvalue matrix does not shadow D, which sampling reads as a vector.
+% bsf starts at Inf, not the reference's 1e+30 sentinel, which RC12 never beats.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -82,7 +82,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     [fitness, nfes] = calculate_fitness(pop', problem, nfes);
     fitness = fitness(:);
 
-    bsf_fit_var = 1e+30;
+    bsf_fit_var = inf;
     bsf_solution = zeros(1, problem_size);
 
     for i = 1:pop_size

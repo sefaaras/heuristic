@@ -56,7 +56,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     [Fit, FE] = calculate_fitness(Pop', problem, FE);
     Fit = Fit(:);
 
-    bsf = min(Fit);
+    [bsf, i_bsf] = min(Fit);
+    bsf_x = Pop(i_bsf, :);   % the point that earned bsf, which the population may not keep
     for eval_count = 1:min(NP, max_nfes)
         curve(eval_count) = bsf;
         [population_history, fitness_history, history_index] = record_history(...
@@ -101,8 +102,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         if Alg_fit + FE > max_nfes
             Alg_fit = max_nfes - FE;
         end
-        [Pop, Fit, archive, Par, FE, bsf, curve, population_history, fitness_history, history_index] = ...
-            CC_LSHADESPA(Alg_fit, Pop, Fit, lu, CC_Group_Ind == 1, archive, Par, ctx, FE, bsf, ...
+        [Pop, Fit, archive, Par, FE, bsf, bsf_x, curve, population_history, fitness_history, history_index] = ...
+            CC_LSHADESPA(Alg_fit, Pop, Fit, lu, CC_Group_Ind == 1, archive, Par, ctx, FE, bsf, bsf_x, ...
                          curve, population_history, fitness_history, history_index);
         if FE >= max_nfes, break; end
 
@@ -137,8 +138,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if (LSHADESPA_CC_nfes + FE) > max_nfes
                 LSHADESPA_CC_nfes = max_nfes - FE;
             end
-            [Pop, LSHADESPA_Fit, archive, Par, FE, bsf, curve, population_history, fitness_history, history_index] = ...
-                CC_LSHADESPA(LSHADESPA_CC_nfes, Pop, Fit, lu, Alg_Group_Ind, archive, Par, ctx, FE, bsf, ...
+            [Pop, LSHADESPA_Fit, archive, Par, FE, bsf, bsf_x, curve, population_history, fitness_history, history_index] = ...
+                CC_LSHADESPA(LSHADESPA_CC_nfes, Pop, Fit, lu, Alg_Group_Ind, archive, Par, ctx, FE, bsf, bsf_x, ...
                              curve, population_history, fitness_history, history_index);
         end
         if FE >= max_nfes, Fit = LSHADESPA_Fit; break; end
@@ -151,8 +152,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if (ANDE_CC_nfes + FE) > max_nfes
                 ANDE_CC_nfes = max_nfes - FE;
             end
-            [Pop, ANDE_Fit, Par, FE, bsf, curve, population_history, fitness_history, history_index] = ...
-                CC_ANDE(ANDE_CC_nfes, Pop, LSHADESPA_Fit, lu, Alg_Group_Ind, Par, ctx, FE, bsf, ...
+            [Pop, ANDE_Fit, Par, FE, bsf, bsf_x, curve, population_history, fitness_history, history_index] = ...
+                CC_ANDE(ANDE_CC_nfes, Pop, LSHADESPA_Fit, lu, Alg_Group_Ind, Par, ctx, FE, bsf, bsf_x, ...
                         curve, population_history, fitness_history, history_index);
         end
         if FE >= max_nfes, Fit = ANDE_Fit; break; end
@@ -165,8 +166,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if (EADE_CC_nfes + FE) > max_nfes
                 EADE_CC_nfes = max_nfes - FE;
             end
-            [Pop, EADE_Fit, Par, FE, bsf, curve, population_history, fitness_history, history_index] = ...
-                CC_EADE(EADE_CC_nfes, Pop, ANDE_Fit, lu, Alg_Group_Ind, Par, ctx, FE, bsf, ...
+            [Pop, EADE_Fit, Par, FE, bsf, bsf_x, curve, population_history, fitness_history, history_index] = ...
+                CC_EADE(EADE_CC_nfes, Pop, ANDE_Fit, lu, Alg_Group_Ind, Par, ctx, FE, bsf, bsf_x, ...
                         curve, population_history, fitness_history, history_index);
         end
         if FE >= max_nfes, Fit = EADE_Fit; break; end
@@ -196,8 +197,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         if MMTS_nfes + FE > max_nfes
             MMTS_nfes = max_nfes - FE;
         end
-        [Pop, Fit, FE, bsf, curve, population_history, fitness_history, history_index] = ...
-            MMTS(MMTS_nfes, Pop, Fit, lu, MMTS_Group_Ind, ctx, FE, bsf, ...
+        [Pop, Fit, FE, bsf, bsf_x, curve, population_history, fitness_history, history_index] = ...
+            MMTS(MMTS_nfes, Pop, Fit, lu, MMTS_Group_Ind, ctx, FE, bsf, bsf_x, ...
                  curve, population_history, fitness_history, history_index);
         if FE >= max_nfes, break; end
 
@@ -240,14 +241,14 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = Pop(I_best, :);
     if bsf < Best_fit
         best_fitness = bsf;
-        best_solution = Pop(I_best, :);
+        best_solution = bsf_x;
         curve(min(FE, max_nfes):end) = bsf;
     end
 end
 
 % CC LSHADE-SPA
-function [PopOld, Fit, archive, Par, FE, bsf, curve, ph, fh, hi] = ...
-        CC_LSHADESPA(CC_nfes, Pop, Fit, lu, CC_Alg_Ind, archive, Par, ctx, FE, bsf, curve, ph, fh, hi)
+function [PopOld, Fit, archive, Par, FE, bsf, bsf_x, curve, ph, fh, hi] = ...
+        CC_LSHADESPA(CC_nfes, Pop, Fit, lu, CC_Alg_Ind, archive, Par, ctx, FE, bsf, bsf_x, curve, ph, fh, hi)
 
     PopOld = Pop;
     Eval_Pop = Pop;
@@ -312,6 +313,10 @@ function [PopOld, Fit, archive, Par, FE, bsf, curve, ph, fh, hi] = ...
         Child_Fit = Child_Fit(:);
         nfes = nfes + NP;
 
+        [min_child, i_child] = min(Child_Fit);
+        if min_child < bsf
+            bsf_x = Eval_Pop(i_child, :);
+        end
         [bsf, curve, ph, fh, hi] = stampN(FE, ctx.maxFE, NP, min(bsf, min(Child_Fit)), ...
                                           curve, Eval_Pop, Child_Fit, ph, fh, hi);
 
@@ -350,8 +355,8 @@ function [PopOld, Fit, archive, Par, FE, bsf, curve, ph, fh, hi] = ...
 end
 
 % CC ANDE
-function [PopOld, Fit, Par, FE, bsf, curve, ph, fh, hi] = ...
-        CC_ANDE(CC_nfes, Pop, Fit, lu, CC_Alg_Ind, Par, ctx, FE, bsf, curve, ph, fh, hi)
+function [PopOld, Fit, Par, FE, bsf, bsf_x, curve, ph, fh, hi] = ...
+        CC_ANDE(CC_nfes, Pop, Fit, lu, CC_Alg_Ind, Par, ctx, FE, bsf, bsf_x, curve, ph, fh, hi)
 
     PopOld = Pop;
     Eval_Pop = Pop;
@@ -404,6 +409,10 @@ function [PopOld, Fit, Par, FE, bsf, curve, ph, fh, hi] = ...
         Child_Fit = Child_Fit(:);
         nfes = nfes + NP;
 
+        [min_child, i_child] = min(Child_Fit);
+        if min_child < bsf
+            bsf_x = Eval_Pop(i_child, :);
+        end
         [bsf, curve, ph, fh, hi] = stampN(FE, ctx.maxFE, NP, min(bsf, min(Child_Fit)), ...
                                           curve, Eval_Pop, Child_Fit, ph, fh, hi);
 
@@ -426,8 +435,8 @@ function [PopOld, Fit, Par, FE, bsf, curve, ph, fh, hi] = ...
 end
 
 % CC EADE
-function [PopOld, Fit, Par, FE, bsf, curve, ph, fh, hi] = ...
-        CC_EADE(CC_nfes, Pop, Fit, lu, CC_Alg_Ind, Par, ctx, FE, bsf, curve, ph, fh, hi)
+function [PopOld, Fit, Par, FE, bsf, bsf_x, curve, ph, fh, hi] = ...
+        CC_EADE(CC_nfes, Pop, Fit, lu, CC_Alg_Ind, Par, ctx, FE, bsf, bsf_x, curve, ph, fh, hi)
 
     PopOld = Pop;
     Eval_Pop = Pop;
@@ -483,6 +492,10 @@ function [PopOld, Fit, Par, FE, bsf, curve, ph, fh, hi] = ...
         Child_Fit = Child_Fit(:);
         nfes = nfes + NP;
 
+        [min_child, i_child] = min(Child_Fit);
+        if min_child < bsf
+            bsf_x = Eval_Pop(i_child, :);
+        end
         [bsf, curve, ph, fh, hi] = stampN(FE, ctx.maxFE, NP, min(bsf, min(Child_Fit)), ...
                                           curve, Eval_Pop, Child_Fit, ph, fh, hi);
 
@@ -505,8 +518,8 @@ function [PopOld, Fit, Par, FE, bsf, curve, ph, fh, hi] = ...
 end
 
 % MMTS local search
-function [PopOld, Fit, FE, bsf, curve, ph, fh, hi] = ...
-        MMTS(CC_nfes, Pop, Fit, lu, CC_Alg_Ind, ctx, FE, bsf, curve, ph, fh, hi)
+function [PopOld, Fit, FE, bsf, bsf_x, curve, ph, fh, hi] = ...
+        MMTS(CC_nfes, Pop, Fit, lu, CC_Alg_Ind, ctx, FE, bsf, bsf_x, curve, ph, fh, hi)
 
     Lbound = lu(1, CC_Alg_Ind);
     Ubound = lu(2, CC_Alg_Ind);
@@ -544,6 +557,9 @@ function [PopOld, Fit, FE, bsf, curve, ph, fh, hi] = ...
                 Eval_Pop(CC_Alg_Ind) = LS_Child_pos;
                 [LS_Child_fit, FE] = calculate_fitness(Eval_Pop', ctx.problem, FE);
                 nfes = 1 + nfes;
+                if LS_Child_fit < bsf
+                    bsf_x = Eval_Pop;
+                end
                 % MMTS is single-point, so record PopOld, the population held frozen during the line search
                 [bsf, curve, ph, fh, hi] = stampN(FE, ctx.maxFE, 1, min(bsf, LS_Child_fit), ...
                                                   curve, PopOld, Fit, ph, fh, hi);
@@ -571,6 +587,9 @@ function [PopOld, Fit, FE, bsf, curve, ph, fh, hi] = ...
                     Eval_Pop(CC_Alg_Ind) = LS_Child_pos;
                     [LS_Child_fit, FE] = calculate_fitness(Eval_Pop', ctx.problem, FE);
                     nfes = 1 + nfes;
+                    if LS_Child_fit < bsf
+                        bsf_x = Eval_Pop;
+                    end
                     % Same as the forward step: record the held population, not the single LS probe
                     [bsf, curve, ph, fh, hi] = stampN(FE, ctx.maxFE, 1, min(bsf, LS_Child_fit), ...
                                                       curve, PopOld, Fit, ph, fh, hi);

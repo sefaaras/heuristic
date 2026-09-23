@@ -32,6 +32,8 @@
 %     20        800      800
 %     100     20000     4000
 %     158     49928     6320
+% bsf starts at Inf, not the reference's 1e+30: CEC2017 F2 at D = 100 never
+% evaluates below 1e30, so the sentinel survived and the run reported it.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -68,7 +70,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     popold = repmat(lu(1, :), pop_size, 1) + rand0 .* (repmat(lu(2, :) - lu(1, :), pop_size, 1));
     pop = popold;
 
-    bsf_fit_var = 1e+30;
+    bsf_fit_var = inf;
     bsf_solution = zeros(1, problem_size);
 
     [fitness, FE] = calculate_fitness(pop', problem, FE);

@@ -22,12 +22,12 @@
 % https://doi.org/10.1109/CEC.2017.7969524
 % ----------------------------------------------------------------------- %
 % Implementation Note:
-% LS2 calls fmincon (Optimization Toolbox) with an sqp inner solver, so this
-% algorithm needs it; the call is wrapped in try/catch and a failure keeps the
-% incumbent, as does a non-finite start point. Neither guard is in the
-% reference, and without the toolbox the run silently does no local search.
-% FE accounting: the start-point probe costs one evaluation and fmincon's own
-% calls are charged through details.funcCount, so it competes for maxFe.
+% LS2 calls fmincon (Optimization Toolbox, sqp) inside try/catch; a failure or a
+% non-finite start point keeps the incumbent. Neither guard is in the reference,
+% and without the toolbox the run silently does no local search.
+% FE accounting: the start probe costs one evaluation and fmincon is charged its
+% details.funcCount. LS2 starts only while budget is left, as the other phases
+% do, so it can overrun maxFe by roughly its own 2 % allowance (LS_FE).
 % Par.Gmax is the reference's hardcoded CEC2017 table (2163, 2745, 3022 for
 % D = 10, 30, 50), falling back to 3401 at any other dimension.
 % CMA-ES samples are repaired every generation; the reference leaves them raw
@@ -224,7 +224,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         end
         
         % Local Search (LS2)
-        if FE > 0.75 * Par.Max_FES
+        if FE > 0.75 * Par.Max_FES && FE < Par.Max_FES
             if rand < Par.prob_ls
                 old_fit_eva = FE;
                 [bestx, bestold, FE, succ] = LS2(bestx, bestold, Par, FE, problem, Par.Max_FES, Par.xmin, Par.xmax);

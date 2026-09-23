@@ -19,6 +19,14 @@
 % Engineering with Computers 35 (2019) 619-626
 % https://doi.org/10.1007/s00366-018-0620-8
 % ----------------------------------------------------------------------- %
+% Implementation Note:
+% The oriented step (X* - X_i)/||X* - X_i|| is 0/0 for a plant sitting on the
+% best, which the plant that just improved it always is; that plant now takes a
+% zero step. The NaN it produced passed the clamp (NaN fails both bound tests),
+% CEC2020RW scores a NaN point at its clamped corner, and so the NaN could win
+% and become best_solution. On the numeric suites a NaN scores NaN and was
+% discarded, and the zero step leaves the same state, so those runs are unchanged.
+% ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
@@ -81,7 +89,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 S_i = (Plants(i, :) - Plants(i + 1, :)) * rand(1) + Plants(i + 1, :);
             elseif i <= step_end
                 % oriented step towards the best plant
-                S_i = Plants(i, :) + rand * ((best - Plants(i, :)) / (norm((best - Plants(i, :)))));
+                step = best - Plants(i, :);
+                if any(step)   % a plant sitting on the best has no direction to step in
+                    step = step / norm(step);
+                end
+                S_i = Plants(i, :) + rand * step;
             else
                 % mortality: random regeneration
                 S_i = zeros(1, d);

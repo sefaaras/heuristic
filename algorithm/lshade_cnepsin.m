@@ -30,6 +30,7 @@
 % written for, and stays right elsewhere: the table overruns by 10x on
 % cec2020_10 and 37x on cec2020_20, where gg/G_Max drives the second sinusoidal
 % form to F in [-2.3, 3.3] instead of [0, 1].
+% bsf starts at Inf, not the reference's 1e+30 sentinel, which RC12 never beats.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -73,7 +74,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     [fitness, FE] = calculate_fitness(pop', problem, FE);
     fitness = fitness(:);
 
-    bsf_fit_var = 1e+30;
+    bsf_fit_var = inf;
 
     for i = 1:pop_size
         if fitness(i) < bsf_fit_var

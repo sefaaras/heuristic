@@ -33,6 +33,7 @@
 % NaN/Inf/complex test on C does not cover for a real symmetric C that has drifted
 % indefinite -- negative eigenvalues make the root complex, zero ones make it Inf.
 % No positive eigenvalue at all resets C to the identity.
+% bsf starts at Inf, not the reference's 1e+30 sentinel, which RC12 never beats.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -70,7 +71,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     [fitness, FE] = calculate_fitness(pop', problem, FE);
     fitness = fitness(:);
 
-    bsf_fit_var = 1e+30;
+    bsf_fit_var = inf;
     bsf_solution = zeros(1, dim);
 
     for i = 1:pop_size
