@@ -13,9 +13,8 @@
 % Algorithm Concept:
 %   - Search runs in the unit cube: every coordinate is normalised by its own
 %     range, so one mapping serves every problem
-%   - Each particle keeps an archive of its best solutions, and the mean and
-%     variance of each coordinate over that archive shape a transformation that
-%     maps a uniform draw into a distribution concentrated around the mean
+%   - Each particle archives its best solutions; the mean and variance of each
+%     coordinate over that archive bend a uniform draw towards the mean
 %   - The variance enters as -log(variance), so a coordinate that has settled
 %     gets a sharp mapping and one that has not stays broad
 %   - Only a subset of coordinates is mutated, shrinking as the budget is spent,
@@ -32,12 +31,15 @@
 % ----------------------------------------------------------------------- %
 % Implementation Note:
 % Ported from the authors' released MVMO-SH for CEC2013 (MVMOS_SH.m), the
-% single-configuration version; their later CEC2015 submission tunes fifteen
-% parameter sets, one per problem, and is not a general algorithm. Only the
-% released default variable-selection strategy is implemented, mode 4, since the
-% other four are never selected by these settings. The local search keeps its
-% fmincon interior-point call, so this algorithm needs the Optimization Toolbox;
-% a failure keeps the incumbent, which the release leaves unguarded.
+% single-configuration version (their CEC2015 one tunes a parameter set per
+% problem). Only the default variable-selection strategy, mode 4, is implemented;
+% the other four are never selected by these settings. The local search keeps its
+% fmincon interior-point call, so this algorithm needs the Optimization Toolbox; a
+% non-finite start or a failure keeps the incumbent, unguarded in the release.
+% fmincon is also cut to the remaining budget, which the release overran by up to
+% 1.1 %. As released, local search stops after a second search ends on a nearly
+% singular warning; that is read from lastwarn, cleared per run here so an earlier
+% parfor job on the same worker cannot trip it.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -88,6 +90,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_fitness = inf;
     best_solution = lb + scaling .* x_norm(1, :);
     delta_nrandomly = n_randomly_ini - n_randomly_last;
+    n_singular_ls = 0;
+    lastwarn('');
 
     while FE < maxFE
         ff = FE / maxFE;
@@ -105,27 +109,38 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 break;
             end
 
+            FE_prev = FE;
             if rand < local_search_prob && FE < make_sense && FE > 1
-                [f_cur, x_norm(ipp, :), FE] = local_search(x_norm(ipp, :), lb, ub, scaling, problem, FE);
+                [f_cur, x_norm(ipp, :), FE, singular] = local_search(x_norm(ipp, :), lb, ub, scaling, problem, FE, maxFE);
+                % The release gives up local search once a second search runs into a nearly singular system
+                n_singular_ls = n_singular_ls + singular;
+                if n_singular_ls >= 2
+                    local_search_prob = 0;
+                end
             else
                 [f_cur, FE] = evaluate_norm(x_norm(ipp, :), lb, scaling, problem, FE);
             end
 
+            % A local search is charged as one block, over which the best so far holds
+            curve(FE_prev + 1:min(FE, maxFE) - 1) = best_fitness;
             if f_cur < best_fitness
                 best_fitness = f_cur;
                 best_solution = lb + scaling .* x_norm(ipp, :);
             end
-            if FE >= 1 && FE <= maxFE
+            if FE <= maxFE
                 curve(FE) = best_fitness;
-                [population_history, fitness_history, history_index] = record_history(...
-                    FE, repmat(lb, n_par, 1) + repmat(scaling, n_par, 1) .* x_norm, ...
-                    archive_f(1, :), population_history, fitness_history, history_index, maxFE);
             end
 
             % Archive of this particle, and the mapping shape it implies
             [archive_x, archive_f, no_in, no_inin, meann, variance, shape, x_norm_best] = ...
                 fill_archive(archive_x, archive_f, no_in, no_inin, meann, variance, shape, ...
                              x_norm_best, x_norm, ipp, f_cur, n_to_save, n_var, l_vari);
+
+            % Population = each evaluated particle's archive leader, the point its fitness belongs to
+            visited = no_in > 0;
+            [population_history, fitness_history, history_index] = record_history( ...
+                FE, lb + scaling .* x_norm_best(visited, :), archive_f(1, visited), ...
+                population_history, fitness_history, history_index, maxFE);
 
             meann_app(ipp, :) = meann(ipp, :);
 
@@ -203,17 +218,26 @@ function [f, FE] = evaluate_norm(x_norm, lb, scaling, problem, FE)
     f = fv(1);
 end
 
-function [f, x_norm, FE] = local_search(x_norm, lb, ub, scaling, problem, FE)
+function [f, x_norm, FE, singular] = local_search(x_norm, lb, ub, scaling, problem, FE, maxFE)
     x0 = lb + scaling .* x_norm;
-    options = optimset('Display', 'off', 'algorithm', 'interior-point', 'UseParallel', 'never');
+    singular = false;
     f = evaluate_for_ls(x0(:), problem);
     FE = FE + 1;
+    if ~isfinite(f)
+        return;
+    end
+    % interior-point's own default of 3000 evaluations, cut to what is left of the budget
+    options = optimset('Display', 'off', 'algorithm', 'interior-point', 'UseParallel', 'never', ...
+                       'MaxFunEvals', min(3000, maxFE - FE));
+    lastwarn('');
     try
         [xls, fls, ~, output] = fmincon(@(xx) evaluate_for_ls(xx, problem), x0(:), ...
                                         [], [], [], [], lb, ub, [], options);
     catch
         return;
     end
+    [~, warn_id] = lastwarn;
+    singular = strcmp(warn_id, 'MATLAB:nearlySingularMatrix');
     FE = FE + output.funcCount;
     if all(isfinite(xls))
         f = fls;
