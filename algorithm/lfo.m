@@ -22,6 +22,12 @@
 % Leader-Follower Optimizer,
 % IEEE Access, vol. 14 (2026), pp. 81195-81216.
 % https://doi.org/10.1109/ACCESS.2026.3697639
+%
+% Implementation Note:
+% The port's convergence stop (best leader unchanged by < 1e-5 absolute and
+% < 1e-3 relative for 10000 consecutive iterations) is removed, so the FE budget is
+% the only terminator. It needs ~2e6 FE of stagnation, so it fired only on the 1e7
+% cec2020_20 budget, ending 4 campaign runs at 27-49 % of their FE.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -37,8 +43,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     numLeaders             = 2;
     initialSigma           = 2;
     explorationProbability = 0.01;
-    absConvCounterLimit    = 10000;
-    relConvCounterLimit    = 10000;
 
     maxIterations = max(2, ceil((maxFE - numFollowers) / (numFollowers + numLeaders)));
 
@@ -85,9 +89,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     iteration = 0;
     running   = true;
-    absConvFlag = false; relConvFlag = false;
-    absConvCounter = 0;  relConvCounter = 0;
-    previousBestFitness = inf;
 
     % Main LFO loop
     while running
@@ -179,34 +180,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         if FE >= maxFE
             running = false;
         end
-
-        currentBestFitness = leaderFitness(1);
-
-        if abs(currentBestFitness - previousBestFitness) < 1e-5
-            absConvCounter = absConvCounter + 1;
-            if absConvCounter >= absConvCounterLimit
-                absConvFlag = true;
-            end
-        else
-            absConvCounter = 0;
-            absConvFlag = false;
-        end
-
-        if abs(currentBestFitness - previousBestFitness) / max(abs(currentBestFitness), 1e-10) < 1e-3
-            relConvCounter = relConvCounter + 1;
-            if relConvCounter >= relConvCounterLimit
-                relConvFlag = true;
-            end
-        else
-            relConvCounter = 0;
-            relConvFlag = false;
-        end
-
-        if absConvFlag && relConvFlag
-            running = false;
-        end
-
-        previousBestFitness = currentBestFitness;
     end
 
     curve(min(FE, maxFE):end) = bsf;

@@ -37,6 +37,9 @@
 % CMA-ES samples are left unrepaired until half the budget is spent, and the
 % feasibility test on a new best compares against a hard -100/100 rather than the
 % problem's own box, which on a suite with another box simply never fires.
+% That test is coordinate-wise, so a NaN fails it: the release's min/max skip NaN,
+% and on CEC2020RW F12 the clamped flat plateau inflates sigma to Inf, whose NaN
+% samples reached best_solution in 4 campaign runs.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -121,7 +124,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 EA_obj2(1:numel(list_ind)) = EA_obj1(list_ind);
                 setting = init_cma_par(setting, EA_2, n, PS2);
                 setting.sigma = setting.sigma * (1 - FE / maxFE);
-            elseif min(EA_2(1, :)) > -100 && max(EA_2(1, :)) < 100
+            elseif all(EA_2(1, :) > -100 & EA_2(1, :) < 100)
                 EA_1(PS1, :) = EA_2(1, :);
                 EA_obj1(PS1) = EA_obj2(1);
                 [EA_obj1, ord] = sort(EA_obj1);
@@ -314,12 +317,24 @@ function [x, fitx, setting, bestold, bestx, fitness, FE, curve, ph, fh, hi] = ..
     [raw, FE] = calculate_fitness(arxvalid, problem, FE);
     raw = raw(:)';
 
+    % Only the batch best can replace bestold, and only inside the hard-coded box
+    inbox = all(arxvalid >= -100 & arxvalid <= 100, 1);
+    [~, ib] = min(raw);
+    accept = raw(ib) < bestold && inbox(ib);
+    run_best = bestold;
     for e = 1:PopSize
+        if accept && inbox(e) && raw(e) < run_best
+            run_best = raw(e);
+        end
         eval_count = FE - PopSize + e;
         if eval_count >= 1 && eval_count <= maxFE
-            curve(eval_count) = min(bestold, min(raw(1:e)));
+            curve(eval_count) = run_best;
             [ph, fh, hi] = record_history(eval_count, arxvalid', raw, ph, fh, hi, maxFE);
         end
+    end
+    if accept
+        bestold = raw(ib);
+        bestx = arxvalid(:, ib)';
     end
 
     [sel, idxsel] = sort(raw);
@@ -327,11 +342,6 @@ function [x, fitx, setting, bestold, bestx, fitness, FE, curve, ph, fh, hi] = ..
     arxvalid = arxvalid(:, idxsel);
     arx = arx(:, idxsel);
     arz = arz(:, idxsel);
-
-    if raw(1) < bestold && min(arxvalid(:, 1)) >= -100 && max(arxvalid(:, 1)) <= 100
-        bestold = raw(1);
-        bestx = arxvalid(:, 1)';
-    end
 
     setting.xold = setting.xmean;
     setting.xmean = arx(:, 1:setting.mu) * setting.weights;

@@ -27,6 +27,13 @@
 % optimization,
 % Communications in Nonlinear Science and Numerical Simulation 152 (2026) 109337.
 % https://doi.org/10.1016/j.cnsns.2025.109337
+%
+% Implementation Note:
+% The bound repair also re-draws a non-finite coordinate, and replaces by index
+% instead of the reference's R.*S + X.*~S blend, which turns an Inf into NaN
+% (Inf*0). On objectives whose optimum is 0 (CEC2020RW F31), BestF + eps in Ir
+% makes w huge, DU1 squares to Inf, and om.*Z1.*DU1 gives Inf*0 = NaN where the
+% mask is 0; NaN passes both bound tests and reached best_solution in 1 campaign run.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -374,11 +381,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = BestX;
 end
 
-% Bound handling: re-draw violating dimensions
+% Bound handling: re-draw violating or non-finite dimensions
 function X = SpaceBound(X, Up, Low)
     Dim = length(X);
-    S = (X > Up) + (X < Low);
-    X = (rand(1, Dim) .* (Up - Low) + Low) .* S + X .* (~S);
+    S = (X > Up) | (X < Low) | ~isfinite(X);
+    R = rand(1, Dim) .* (Up - Low) + Low;
+    X(S) = R(S);
 end
 
 % Clamp an index into [1, nPop]
