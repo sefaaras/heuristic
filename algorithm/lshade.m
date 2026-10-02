@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Success-History Based DE with Linear Population Size Reduction (L-SHADE)
+% CEC 2014 competition winner
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 18 * D            % Initial population size

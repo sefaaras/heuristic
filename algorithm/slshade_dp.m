@@ -1,6 +1,6 @@
 % ----------------------------------------------------------------------- %
 % L-SHADE with Selective Mutation and Dynamic Perturbation (S-LSHADE-DP)
-% CEC 2022 competition (GECCO track) entry
+% CEC 2022 competition -- 4th place
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size    = 100            % Reduced linearly to 4

@@ -16,7 +16,7 @@
 % Moth-flame optimization algorithm: A novel nature-inspired heuristic paradigm,
 % Knowledge-Based Systems, Volume 89, 2015, Pages 228-249
 % https://doi.org/10.1016/j.knosys.2015.07.006
-%
+% ----------------------------------------------------------------------- %
 % Implementation Note:
 %   curve and best_fitness track the best point the run has evaluated. The flame
 %   set is built from the previous generation, as the reference has it, so it

@@ -1,6 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Adaptive-Parameter GSK hybridized with IMODE (APGSK-IMODE)
-% CEC 2021 competition entry
+% CEC 2021 competition -- 1st in the non-shifted ranking, 4th shifted
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NP  = 30*D          % Total population, split PS2 = round(NP/4) for APGSK

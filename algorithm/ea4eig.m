@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Evolutionary Algorithm with 4 Eigenvector-based Strategies (EA4eig)
+% CEC 2022 competition winner
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   N_init = 100              % Initial population size

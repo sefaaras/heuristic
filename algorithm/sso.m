@@ -20,7 +20,7 @@
 % social-spider,
 % Expert Systems with Applications 40(16) (2013) 6374-6384
 % https://doi.org/10.1016/j.eswa.2013.05.041
-%
+% ----------------------------------------------------------------------- %
 % Implementation Note:
 %   The reference draws every dimension from lb(1)..ub(1) and normalises its
 %   distances by that one span. Both now read the real per-dimension bounds --

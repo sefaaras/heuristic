@@ -22,7 +22,7 @@
 % Leader-Follower Optimizer,
 % IEEE Access, vol. 14 (2026), pp. 81195-81216.
 % https://doi.org/10.1109/ACCESS.2026.3697639
-%
+% ----------------------------------------------------------------------- %
 % Implementation Note:
 % The port's convergence stop (best leader unchanged by < 1e-5 absolute and
 % < 1e-3 relative for 10000 consecutive iterations) is removed, so the FE budget is

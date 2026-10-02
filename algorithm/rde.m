@@ -1,6 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Reconstructed Differential Evolution (RDE)
-% CEC 2024 bound-constrained track submission
+% CEC 2024 competition -- 2nd place (3rd in CEC 2025)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NP = 18*D -> 4              % Linear reduction over the budget
@@ -38,7 +38,8 @@
 % successful generation while Cr's is frozen once the slot turns -1. Trials are
 % evaluated one generation at a time rather than one at a time, which changes
 % nothing, since a generation's trials are all built from the population as it
-% stood at the start of that generation.
+% stood at the start of that generation. Changed: the release evaluates jittered
+% coordinates outside the box; they get the donor's midpoint repair here.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -189,6 +190,10 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 U(i, :) = pop(i, :);
             end
             U(i, take) = donor(take);
+            below = U(i, :) < lb;
+            above = U(i, :) > ub;
+            U(i, below) = 0.5 * (lb(below) + pop(i, below));
+            U(i, above) = 0.5 * (ub(above) + pop(i, above));
 
             F_used(i) = F;
             CR_used(i) = CR;

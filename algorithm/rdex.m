@@ -1,9 +1,9 @@
 % ----------------------------------------------------------------------- %
 % Reconstructed Differential Evolution with Exploitation hybrid (RDEx)
-% CEC 2025 bound-constrained single-objective track submission
+% CEC 2025 competition winner (bound-constrained single-objective track)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
-%   NP = 20*D -> 4              % Front population, reduced linearly
+%   NP = 18*D -> 4              % Front population, reduced linearly
 %   H = 5                       % Memory slots for Cr and F, both initialised to 1
 %   meanF = 0.4 + 0.25*tanh(5*SR)  % Scale factor mean, driven by the success rate
 %   p = 0.7*exp(-7*SR)          % pbest rate of the base branch
@@ -37,10 +37,12 @@
 % Implementation Note:
 % Ported from the authors' RDEx_SOP release (RDEx.cpp in the CEC2025 package),
 % which is L-SRTDE with the ordered branch added, so the shared parts follow this
-% repository's lsrtde.m. The gate on that branch is kept exactly as written --
-% the uniform draw is replaced by the constant 2 while less than 70 % of the
-% budget is spent, so the branch can only open early when its own share has
-% already grown above 2*(1-t).
+% repository's lsrtde.m. NP = 18*D is the PopSize of its competition runs (20 is
+% only its timing block). Its gate 1 - NFEval/MaxFEval is integer division, so it
+% is 1: the ordered branch is shut before 70 % of the budget and then opens with
+% probability EB_rate. Changed: the release resamples only crossover coordinates
+% and evaluates Cauchy-jittered ones outside the box; every out-of-box coordinate
+% is resampled here, as in de2ls and rde26.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -53,7 +55,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     maxFE = problem.maxFe;
     span  = ub - lb;
 
-    NIndsFrontMax = 20 * dim;
+    NIndsFrontMax = 18 * dim;
     PopulSize     = 2 * NIndsFrontMax;
     MemorySize    = 5;
     sigmaF        = 0.02;
@@ -137,7 +139,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             if t < 0.7
                 Rand_EB = 2;
             end
-            use_eb = (Rand_EB * (1 - t)) < eb_rate;
+            use_eb = Rand_EB < eb_rate;   % the release's (1 - NFEval/MaxFEval) is integer division, i.e. 1
             eb_flag(TheChosenOne) = use_eb;
 
             base = PopulFront(TheChosenOne, :);
@@ -228,7 +230,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             end
             Trial(take) = donor(take);
 
-            oob = take & (Trial < lb | Trial > ub);
+            oob = Trial < lb | Trial > ub | ~isfinite(Trial);
             if any(oob)
                 Trial(oob) = lb(oob) + rand(1, sum(oob)) .* span(oob);
             end

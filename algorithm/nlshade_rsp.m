@@ -1,6 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Non-Linear SHADE with Rank-based Selective Pressure (NL-SHADE-RSP)
-% CEC 2021 competition winner
+% CEC 2021 competition -- 1st in the shifted rankings, 5th non-shifted
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NIndsMax     = 30 * D      % Initial population (non-linear reduction to 4)

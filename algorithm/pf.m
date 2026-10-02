@@ -16,7 +16,7 @@
 % A new meta-heuristic optimizer: Pathfinder algorithm,
 % Applied Soft Computing 78 (2019) 545-568
 % https://doi.org/10.1016/j.asoc.2019.03.012
-%
+% ----------------------------------------------------------------------- %
 % Implementation Note:
 %   The pathfinder is bounded element by element, the way the reference already
 %   bounds its followers. Guarding that clamp with all(path_ < Lb) only repairs a

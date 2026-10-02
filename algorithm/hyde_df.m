@@ -1,6 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Hybrid-adaptive Differential Evolution with Decay Function (HyDE-DF)
-% CEC 2019 / GECCO 2019 100-Digit Challenge entry (score 93)
+% CEC 2019 100-Digit Challenge -- 3rd place, tied (score 93)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NP   = 50                    % Population size

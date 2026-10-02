@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Distance Based Parameter Adaptation for Success-History based DE (DISH)
+% CEC 2019 100-Digit Challenge -- 2nd place
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size     = round(sqrt(D) * log(D) * 25)   % Initial population size

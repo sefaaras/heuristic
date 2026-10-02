@@ -27,7 +27,7 @@
 % optimization,
 % Communications in Nonlinear Science and Numerical Simulation 152 (2026) 109337.
 % https://doi.org/10.1016/j.cnsns.2025.109337
-%
+% ----------------------------------------------------------------------- %
 % Implementation Note:
 % The bound repair also re-draws a non-finite coordinate, and replaces by index
 % instead of the reference's R.*S + X.*~S blend, which turns an Inf into NaN

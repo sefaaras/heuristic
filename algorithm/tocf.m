@@ -27,7 +27,7 @@
 % algorithm for solving engineering problems,
 % Artificial Intelligence Review 58, 123 (2025).
 % https://doi.org/10.1007/s10462-025-11118-9
-%
+% ----------------------------------------------------------------------- %
 % Implementation Note:
 %   Random re-formation displaces a windstorm at the end of an iteration and the
 %   box is only re-imposed when that storm is next evaluated, so a sample taken

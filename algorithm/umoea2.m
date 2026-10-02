@@ -1,6 +1,6 @@
 % ----------------------------------------------------------------------- %
 % United Multi-Operator Evolutionary Algorithms II (UMOEAs-II)
-% CEC 2016 bound-constrained track submission
+% CEC 2016 competition winner (Friedman ranking, CEC 2014 suite)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   PS1 = 18*D -> 4             % DE subpopulation, reduced linearly

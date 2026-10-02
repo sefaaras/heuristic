@@ -17,7 +17,7 @@
 % Marine Predators Algorithm: A nature-inspired metaheuristic,
 % Expert Systems with Applications 152 (2020) 113377
 % https://doi.org/10.1016/j.eswa.2020.113377
-%
+% ----------------------------------------------------------------------- %
 % Implementation Note:
 %   Marine memory saving selects with logical indexing instead of the
 %   reference's `mask.*old + ~mask.*new`. That product form reads the branch it

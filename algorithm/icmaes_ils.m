@@ -1,23 +1,25 @@
 % ----------------------------------------------------------------------- %
 % Iterated CMA-ES with MTS local search (iCMAES-ILS)
+% CEC 2013 competition -- 2nd by mean aggregated rank (1st by Friedman test)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   learn_budget = 0.15         % Share of the budget each component gets to prove itself
+%   lambda0 = 4 + floor(9.687*ln N), mu = floor(lambda/1.614)  % Tuned CMA-ES sizes
+%   lambda = floor(3.245*lambda), at most 200  % IPOP growth at every restart
 %   sigma0 = 0.6825 * box width % Initial step size of every CMA-ES restart
-%   step0 = 0.6703 * box width  % Initial step of the local search
-%   step reset = U[0.3, 0.6]    % Step redrawn when it collapses below 1e-20
+%   TolFun, TolHistFun, TolX = 10^-9.023, 10^-10.82, 10^-16.26  % CMA-ES restart triggers
+%   step0 = 0.6703 * box width  % Initial step of the local search, reset every cycle
 %   bias = 0.0191               % Pull of the incumbent in a local search restart
-%   lambda = 4 + floor(3*log(N))
 %
 % Algorithm Concept:
-%   - Two components that do not interact during a run: restart CMA-ES and the
-%     MTS-LS1 line search, each given the other's best point to start from
-%   - Each gets 15 % of the budget to prove itself; the one that comes back with
-%     the better value then spends the remaining 70 % alone
+%   - IPOP-CMA-ES and the MTS-LS1 iterated local search compete from the same
+%     random start, each for 15 % of the budget
+%   - The local search takes the remaining 70 % only if it beat the CMA-ES
+%     best; otherwise CMA-ES resumes from its own best point
 %   - MTS-LS1 sweeps the coordinates one at a time, trying a step back and then
 %     half a step forward, halving the step after a sweep that improves nothing
-%   - When the step collapses the search restarts from a random point pulled
-%     almost all the way towards the incumbent, which is the ILS part
+%   - A cycle of D sweeps that leaves the best unchanged restarts the search from
+%     a random point pulled almost all the way to the incumbent
 %
 % Reference:
 % Tianjun Liao, Thomas Stuetzle,
@@ -25,18 +27,18 @@
 % for real-parameter optimization,
 % 2013 IEEE Congress on Evolutionary Computation (CEC), 2013, pp. 1938-1944.
 % https://doi.org/10.1109/CEC.2013.6557796
-% Components: restart CMA-ES (Hansen) and MTS-LS1 (Tseng and Chen).
+% Components: IPOP-CMA-ES (Auger and Hansen) and MTS-LS1 (Tseng and Chen).
 % ----------------------------------------------------------------------- %
 % Implementation Note:
-% Ported from the authors' released C++ (icmaesils.cc), with the tuned settings
-% their README gives on its example command line -- learn_perbudget 0.15,
-% mtsls1_initstep_rate 0.6703, mtsls1_iterbias_choice 0.01910, ttunec 0.6825 --
-% since the code itself carries no defaults. The CMA-ES side is this
-% repository's ipop_cmaes core rather than their bundled cmaes.c, so its
-% termination criteria are Hansen's MATLAB ones; both stop on the same budget.
-% The local search re-evaluates its current point at every coordinate, as the
-% release does, which costs an evaluation per coordinate but is what its budget
-% accounting assumes.
+% Ported from the authors' released C++ (icmaesils.cc) with all tuned settings of
+% its README command line, since the code carries no defaults. The CMA-ES side is
+% this repository's ipop_cmaes core (Hansen's MATLAB update, boundary handling and
+% stopping tests) run with the release's lambda, mu, IPOP factor and tolerances.
+% Kept from the release: the local search's convergence test compares a value with
+% itself, so the second step collapse in a cycle ends that cycle; its best starts
+% at the CMA-ES value, so it is deployed only if it beats CMA-ES strictly; it
+% re-evaluates its current point at every coordinate. Changed: out-of-box local
+% search points are clamped instead of scored with the release's growing penalty.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -49,7 +51,12 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     maxFE = problem.maxFe;
 
     learn_budget = 0.15;
-    sigma_rate   = 0.6825;
+    cma.lambda0  = 4 + floor(9.687 * log(N));
+    cma.mu_div   = 1.614;
+    cma.ipop     = 3.245;
+    cma.lam_max  = 200;
+    cma.sigma    = 0.6825;
+    cma.tol      = 10 .^ [-9.023, -10.82, -16.26];   % TolFun, TolHistFun, TolX
     step_rate    = 0.6703;
     bias         = 0.01910;
 
@@ -59,9 +66,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     population_history = [];  % record_history allocates the metric buffers on its first sample
     fitness_history    = [];
     history_index      = 1;
-
-    bsf  = inf;
-    bsfx = (lb + ub)' / 2;
 
     x0 = lb + rand(N, 1) .* (ub - lb);
     [f0, FE] = calculate_fitness(x0, problem, FE);
@@ -73,25 +77,26 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             FE, bsfx, bsf, population_history, fitness_history, history_index, maxFE);
     end
 
-    % Learning phase: each component gets the same share, starting from the other's best
-    [FE, curve, population_history, fitness_history, history_index, bsf, bsfx, cma_best] = ...
+    % Competition phase: both components start from x0
+    [FE, curve, population_history, fitness_history, history_index, bsf, bsfx, cma_best, cma_x] = ...
         run_cmaes(problem, FE, min(maxFE, FE + round(learn_budget * maxFE)), maxFE, curve, ...
-                  population_history, fitness_history, history_index, bsf, bsfx, bsfx', sigma_rate);
+                  population_history, fitness_history, history_index, bsf, bsfx, x0, f0(1), cma);
 
-    [FE, curve, population_history, fitness_history, history_index, bsf, bsfx, ls_best] = ...
+    improve = true;   % the release keeps this flag global, so it carries into the next call
+    [FE, curve, population_history, fitness_history, history_index, bsf, bsfx, ls_best, ls_x, improve] = ...
         run_mtsls1(problem, FE, min(maxFE, FE + round(learn_budget * maxFE)), maxFE, curve, ...
-                   population_history, fitness_history, history_index, bsf, bsfx, bsfx', ...
-                   step_rate, bias);
+                   population_history, fitness_history, history_index, bsf, bsfx, x0', ...
+                   cma_best, x0', improve, step_rate, bias);
 
-    % Deployment phase: the winner spends what is left
-    if cma_best < ls_best
-        [FE, curve, population_history, fitness_history, history_index, bsf, bsfx, ~] = ...
-            run_cmaes(problem, FE, maxFE, maxFE, curve, population_history, fitness_history, ...
-                      history_index, bsf, bsfx, bsfx', sigma_rate);
-    else
-        [FE, curve, population_history, fitness_history, history_index, bsf, bsfx, ~] = ...
+    % Deployment phase: the winner spends what is left from its own best point
+    if cma_best > ls_best
+        [FE, curve, population_history, fitness_history, history_index, bsf, bsfx] = ...
             run_mtsls1(problem, FE, maxFE, maxFE, curve, population_history, fitness_history, ...
-                       history_index, bsf, bsfx, bsfx', step_rate, bias);
+                       history_index, bsf, bsfx, ls_x, ls_best, ls_x, improve, step_rate, bias);
+    else
+        [FE, curve, population_history, fitness_history, history_index, bsf, bsfx] = ...
+            run_cmaes(problem, FE, maxFE, maxFE, curve, population_history, fitness_history, ...
+                      history_index, bsf, bsfx, cma_x(:), cma_best, cma);
     end
 
     curve(min(max(FE, 1), maxFE):end) = bsf;
@@ -100,16 +105,17 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     best_solution = bsfx;
 end
 
-% Restart CMA-ES: the first run starts from the incumbent, later ones from random points
-function [FE, curve, ph, fh, hidx, bsf, bsfx, phase_best] = run_cmaes( ...
-        problem, FE, stopFE, maxFE, curve, ph, fh, hidx, bsf, bsfx, xstart, sigma_rate)
+% IPOP-CMA-ES: the first run starts from xstart, later ones from random points with a larger population
+function [FE, curve, ph, fh, hidx, bsf, bsfx, phase_best, phase_x] = run_cmaes( ...
+        problem, FE, stopFE, maxFE, curve, ph, fh, hidx, bsf, bsfx, xstart, fstart, cma)
 
     N  = problem.dimension;
     lb = problem.lb(:);
     ub = problem.ub(:);
-    lambda_def = max(4, 4 + floor(3 * log(N)));
-    sigma0 = sigma_rate * (ub - lb);
-    phase_best = inf;
+    sigma0 = cma.sigma * (ub - lb);
+    phase_best = fstart;
+    phase_x = xstart(:)';
+    lambda = cma.lambda0;
     first = true;
 
     while FE < stopFE && stopFE - FE >= 4
@@ -119,85 +125,103 @@ function [FE, curve, ph, fh, hidx, bsf, bsfx, phase_best] = run_cmaes( ...
         else
             x0 = lb + rand(N, 1) .* (ub - lb);
         end
-        lambda = max(4, min(lambda_def, stopFE - FE));
-        [FE, curve, ph, fh, hidx, bsf, bsfx, ~] = cmaesRun(problem, FE, stopFE, curve, ph, fh, ...
-            hidx, bsf, bsfx, x0, sigma0, lambda);
-        phase_best = min(phase_best, bsf);
+        lam = max(4, min(lambda, stopFE - FE));
+        [FE, curve, ph, fh, hidx, bsf, bsfx, run_best, run_x] = cmaesRun(problem, FE, stopFE, ...
+            curve, ph, fh, hidx, bsf, bsfx, x0, sigma0, lam, cma);
+        if run_best < phase_best
+            phase_best = run_best;
+            phase_x = run_x;
+        end
+        lambda = min(cma.lam_max, floor(cma.ipop * lambda));
     end
-    curve(min(max(FE, 1), maxFE):min(max(FE, 1), maxFE)) = bsf;
+    curve(min(max(FE, 1), maxFE)) = bsf;
 end
 
-% MTS-LS1 with an iterated restart, Eq. (1)-(3) of the reference
-function [FE, curve, ph, fh, hidx, bsf, bsfx, phase_best] = run_mtsls1( ...
-        problem, FE, stopFE, maxFE, curve, ph, fh, hidx, bsf, bsfx, xstart, step_rate, bias)
+% MTS-LS1 inside an iterated local search, as in the release's ILSmtsls1
+function [FE, curve, ph, fh, hidx, bsf, bsfx, ls_best, ls_x, improve] = run_mtsls1( ...
+        problem, FE, stopFE, maxFE, curve, ph, fh, hidx, bsf, bsfx, xstart, ls_best, ls_x, ...
+        improve, step_rate, bias)
 
     N  = problem.dimension;
     lb = problem.lb(:)';
     ub = problem.ub(:)';
     span = ub - lb;
+    s0 = step_rate * span;
 
     xk = min(max(xstart(:)', lb), ub);
-    best_x = xk;
-    phase_best = inf;
-    s = step_rate * span;
-    improved = true;
+    if FE < stopFE
+        [f, FE, curve, ph, fh, hidx, bsf, bsfx] = probe(xk, problem, FE, maxFE, curve, ph, fh, hidx, bsf, bsfx);
+        [ls_best, ls_x] = keep_best(f, xk, ls_best, ls_x);
+    end
+    s = s0;
 
     while FE < stopFE
-        if ~improved
-            s = s / 2;
-            if max(s) < 1e-20
-                % The step has collapsed: restart from a random point pulled to the incumbent
-                srand = lb + rand(1, N) .* span;
-                xk = srand + ((1 - bias) * rand(1, N) + bias) .* (best_x - srand);
-                s = (0.3 + 0.3 * rand) * span;
+        accept_before = ls_best;
+        collapses = 0;
+        for sweep = 1:N                                  % the release's maxiter = 1*dim
+            if ~improve
+                s = s / 2;
+                if max(s) < 1e-20
+                    collapses = collapses + 1;
+                    s = (0.3 + 0.3 * rand) * span;
+                end
             end
-        end
-        improved = false;
+            improve = false;
 
-        for i = 1:N
-            if FE >= stopFE
-                break;
-            end
-            [before1, FE, curve, ph, fh, hidx, bsf, bsfx] = probe(xk, problem, FE, maxFE, curve, ph, fh, hidx, bsf, bsfx);
-            if before1 < phase_best
-                phase_best = before1;
-                best_x = xk;
-            end
-            if FE >= stopFE
-                break;
-            end
-
-            xk(i) = xk(i) - s(i);
-            xk = min(max(xk, lb), ub);
-            [after1, FE, curve, ph, fh, hidx, bsf, bsfx] = probe(xk, problem, FE, maxFE, curve, ph, fh, hidx, bsf, bsfx);
-            if after1 < phase_best
-                phase_best = after1;
-                best_x = xk;
-            end
-
-            if abs(after1 - before1) <= 1e-20
-                xk(i) = xk(i) + s(i);
-            elseif after1 > before1
-                xk(i) = xk(i) + 1.5 * s(i);          % undo, then half a step the other way
-                xk = min(max(xk, lb), ub);
+            for i = 1:N
                 if FE >= stopFE
                     break;
                 end
-                [after2, FE, curve, ph, fh, hidx, bsf, bsfx] = probe(xk, problem, FE, maxFE, curve, ph, fh, hidx, bsf, bsfx);
-                if after2 < phase_best
-                    phase_best = after2;
-                    best_x = xk;
+                [before1, FE, curve, ph, fh, hidx, bsf, bsfx] = probe(xk, problem, FE, maxFE, curve, ph, fh, hidx, bsf, bsfx);
+                [ls_best, ls_x] = keep_best(before1, xk, ls_best, ls_x);
+                if FE >= stopFE
+                    break;
                 end
-                if after2 >= before1
-                    xk(i) = xk(i) - 0.5 * s(i);
+
+                xi = xk(i);
+                xk(i) = max(min(xi - s(i), ub(i)), lb(i));
+                [after1, FE, curve, ph, fh, hidx, bsf, bsfx] = probe(xk, problem, FE, maxFE, curve, ph, fh, hidx, bsf, bsfx);
+                [ls_best, ls_x] = keep_best(after1, xk, ls_best, ls_x);
+
+                if abs(after1 - before1) <= 1e-20
+                    xk(i) = xi;
+                elseif after1 > before1
+                    xk(i) = max(min(xi + 0.5 * s(i), ub(i)), lb(i));   % half a step the other way
+                    if FE >= stopFE
+                        break;
+                    end
+                    [after2, FE, curve, ph, fh, hidx, bsf, bsfx] = probe(xk, problem, FE, maxFE, curve, ph, fh, hidx, bsf, bsfx);
+                    [ls_best, ls_x] = keep_best(after2, xk, ls_best, ls_x);
+                    if after2 >= before1
+                        xk(i) = xi;
+                    else
+                        improve = true;
+                    end
                 else
-                    improved = true;
+                    improve = true;
                 end
-            else
-                improved = true;
             end
-            xk = min(max(xk, lb), ub);
+            % The release's convergence test compares a value with itself: a second collapse ends the cycle
+            if FE >= stopFE || collapses >= 2
+                break;
+            end
         end
+        if FE >= stopFE
+            break;
+        end
+
+        if accept_before - ls_best < 1e-20
+            srand = lb + rand(1, N) .* span;
+            xk = srand + ((1 - bias) * rand(1, N) + bias) .* (ls_x - srand);
+        end
+        s = s0;
+    end
+end
+
+function [best, bestx] = keep_best(f, x, best, bestx)
+    if best - f > 1e-30
+        best = f;
+        bestx = x;
     end
 end
 
@@ -216,19 +240,20 @@ end
 
 % Helper Functions
 
-function [FE, curve, ph, fh, hidx, bsf, bsfx, used] = cmaesRun( ...
+function [FE, curve, ph, fh, hidx, bsf, bsfx, run_best, run_x] = cmaesRun( ...
         problem, FE, maxFE, curve, ph, fh, hidx, bsf, bsfx, ...
-        xstart, insigma, lambda)
-% One (mu/mu_w, lambda)-CMA-ES run under Hansen's stopping criteria or the budget; returns FEs used
+        xstart, insigma, lambda, cma)
+% One (mu/mu_w, lambda)-CMA-ES run under Hansen's stopping criteria or the budget; returns its own best
 
     N  = problem.dimension;
     lb = problem.lb(:);
     ub = problem.ub(:);
 
-    used = 0;
+    run_best = inf;
+    run_x    = xstart(:)';
 
-    % Strategy parameters (cmaes.m defaults)
-    mu      = floor(lambda / 2);
+    % Strategy parameters (cmaes.m defaults except the release's mu)
+    mu      = floor(lambda / cma.mu_div);
     weights = log(max(mu, lambda / 2) + 0.5) - log(1:mu)';
     mueff   = sum(weights) ^ 2 / sum(weights .^ 2);
     weights = weights / sum(weights);
@@ -262,10 +287,10 @@ function [FE, curve, ph, fh, hidx, bsf, bsfx, used] = cmaesRun( ...
     end
 
     % Termination thresholds
-    stopTolX       = 1e-12 * max(insigma);      % IPOP paper value
+    stopTolX       = cma.tol(3);
     stopTolUpX     = 1e3   * max(insigma);
-    stopTolFun     = 1e-12;
-    stopTolHistFun = 1e-13;
+    stopTolFun     = cma.tol(1);
+    stopTolHistFun = cma.tol(2);
     stopMaxIter    = 1e3 * (N + 5) ^ 2 / sqrt(lambda);
 
     histLen        = 10 + ceil(3 * 10 * N / lambda);
@@ -284,9 +309,10 @@ function [FE, curve, ph, fh, hidx, bsf, bsfx, used] = cmaesRun( ...
     % Evaluate the initial mean (cmaes.m EvalInitialX defaults to on)
     if FE < maxFE
         [f0, FE] = calculate_fitness(xmean, problem, FE);
-        used     = used + 1;
         f0       = f0(1);
         fitHist(1) = f0;
+        run_best = f0;
+        run_x    = xmean';
         if f0 < bsf
             bsf  = f0;
             bsfx = xmean';
@@ -310,7 +336,6 @@ function [FE, curve, ph, fh, hidx, bsf, bsfx, used] = cmaesRun( ...
 
         [fraw, FE] = calculate_fitness(arxvalid, problem, FE);
         fraw = fraw(:)';
-        used = used + nsample;
 
         % Best-so-far, curve and history
         popRows = arxvalid';
@@ -318,6 +343,10 @@ function [FE, curve, ph, fh, hidx, bsf, bsfx, used] = cmaesRun( ...
             if fraw(k) < bsf
                 bsf  = fraw(k);
                 bsfx = popRows(k, :);
+            end
+            if fraw(k) < run_best
+                run_best = fraw(k);
+                run_x    = popRows(k, :);
             end
             ec = FE - nsample + k;
             if ec >= 1 && ec <= maxFE

@@ -1,6 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Self-Organizing Migrating Algorithm Team To Team Adaptive (SOMA T3A)
-% CEC 2019 / GECCO 2019 100-Digit Challenge entry (score 93)
+% CEC 2019 100-Digit Challenge -- 3rd place, tied (score 93)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   PopSize = 100               % Population size

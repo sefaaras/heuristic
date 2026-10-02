@@ -19,6 +19,16 @@
 % IEEE Access, vol. 10, pp. 16188-16208, 2022.
 % https://doi.org/10.1109/ACCESS.2022.3146374
 % ----------------------------------------------------------------------- %
+% Implementation Note:
+% The reference code carries two DAF lines and runs the second, DAF2 =
+% (M_Iter + 1/C_Iter)^alpha; DAF1 = (C_Iter/M_Iter + 1)^-alpha, which falls from
+% 1 towards 0, is commented out. DAF2 is at least M_Iter^25, so r1 < DAF always
+% holds: the +/- DCS branch never runs, and every candidate is Best_P*DCS*c or
+% Best_P/DCS*c with c = (UB-LB)*Mu + LB, which is -99.8 on [-100, 100]. The
+% candidates land on the bounds or, as DCS shrinks, near the origin. Kept as
+% released; on CEC2014 F1 (D = 10) the best never improves after the first
+% generation, and the algorithm ends worse than pure random search.
+% ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %

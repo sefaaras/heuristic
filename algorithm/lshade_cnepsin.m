@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % L-SHADE with Competing Neighbourhood Ensemble Sinusoidal Parameter Adaptation (L-SHADE-cnEpSin)
+% CEC 2017 competition -- 3rd place
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 18 * D            % Initial population size

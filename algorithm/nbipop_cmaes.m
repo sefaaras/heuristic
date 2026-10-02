@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % NBIPOP Restart Active CMA-ES (NBIPOP-aCMA-ES)
+% CEC 2013 competition -- 1st by mean aggregated rank (2nd by Friedman test)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   lambda_default = 4 + floor(3*log(N))

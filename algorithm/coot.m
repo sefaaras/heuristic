@@ -15,7 +15,7 @@
 % A new optimization method based on COOT bird natural life model,
 % Expert Systems with Applications 183 (2021) 115352
 % https://doi.org/10.1016/j.eswa.2021.115352
-%
+% ----------------------------------------------------------------------- %
 % Implementation Note:
 %   curve and best_fitness track the best point the run has evaluated. gBest is
 %   updated in the leader phase alone, as the reference has it, so it stays the

@@ -21,7 +21,7 @@
 % Scalability and Real-World Applications,
 % Communications in Nonlinear Science and Numerical Simulation (2026) 110465.
 % https://doi.org/10.1016/j.cnsns.2026.110465
-%
+% ----------------------------------------------------------------------- %
 % Implementation Note:
 %   The RHBS candidate X_EBSR is clamped to the box where it is built, as the
 %   ACM candidate Xnew already was. Unclamped it was evaluated outside the box,

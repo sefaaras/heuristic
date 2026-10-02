@@ -1,6 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Non-Linear Population Size Reduction SHADE with Linear Bias Change (NL-SHADE-LBC)
-% CEC 2022 competition winner
+% CEC 2022 competition -- 2nd place (1st in the corrected re-ranking)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NP_init     = 23 * D         % Initial population, reduced non-linearly to 4

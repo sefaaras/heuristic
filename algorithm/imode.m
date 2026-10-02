@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Improved Multi-operator Differential Evolution (IMODE)
+% CEC 2020 competition winner
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   PopSize     = 6*n^2 (n <= 20) / 18*n (n > 20)   % see the port note

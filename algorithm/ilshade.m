@@ -1,6 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Improved L-SHADE (iL-SHADE)
-% CEC 2016 bound-constrained track submission
+% CEC 2016 competition -- 3rd place (Friedman ranking, CEC 2014 suite)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 12*D -> 4        % Linear reduction over the budget

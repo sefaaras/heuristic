@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % L-SHADE with Semi-Parameter Adaptation and CMA-ES (L-SHADE-SPACMA)
+% CEC 2017 competition -- 4th place
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 18 * D            % Initial population size

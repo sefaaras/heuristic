@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Ensemble Butterfly Optimization with CMA-ES Restart (EBO with CMAR)
+% CEC 2017 competition winner
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   PS1 = 18*n              % Population size for EBO phase

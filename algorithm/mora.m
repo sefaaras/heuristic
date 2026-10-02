@@ -30,7 +30,7 @@
 % for Global Optimization,
 % Mathematics 2026, 14, 2171.
 % https://doi.org/10.3390/math14122171
-%
+% ----------------------------------------------------------------------- %
 % Implementation Note:
 %   The board-setup loop re-evaluates the position kept by opposition learning,
 %   whose value min(f1, f2) is already in hand. It is kept: on CEC2020RW the

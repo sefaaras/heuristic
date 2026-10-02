@@ -17,7 +17,7 @@
 % A powerful and efficient algorithm for numerical function optimization: artificial bee colony (ABC) algorithm,
 % Journal of Global Optimization 39 (2007) 459-471
 % https://doi.org/10.1007/s10898-007-9149-x
-%
+% ----------------------------------------------------------------------- %
 % Implementation Note:
 %   curve and best_fitness track the best point the run has evaluated. The
 %   reference refreshes its global best once per cycle, after the onlooker
