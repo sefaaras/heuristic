@@ -1,29 +1,54 @@
 % ----------------------------------------------------------------------- %
-% Adaptive Guided Differential Evolution (AGDE)
+% Fitness-Distance Balance based Adaptive Guided Differential Evolution (FDB-AGDE)
+% Variant of agde: roulette-FDB pick replaces the bottom-5 donor x_pworst
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NP = 50                 % Population size
-%   F = 0.1 + 0.9*rand      % Adaptive scaling factor
+%   F = 0.1 + 0.9*rand      % Scaling factor, drawn per trial
 %   CR = Adaptive           % Crossover rate (two pools: 0.05-0.15 or 0.9-1.0)
 %
 % Algorithm Concept:
-%   - Variant of Differential Evolution with adaptive crossover rate
-%   - Uses two CR pools: low (0.05-0.15) and high (0.9-1.0)
-%   - Pool selection probability adapts based on success rate
-%   - Mutation uses best, worst, and middle individuals
-%   - Balances exploration and exploitation through adaptive mechanism
+%   - Mutation v = x_r + F*(x_pbest - x_pworst): x_r from the middle 40 and
+%     x_pbest from the best 5 of the fitness-sorted population
+%   - x_pworst is drawn by roulette FDB over the whole population, score =
+%     normalised fitness + normalised L1 distance to the best (agde: worst 5)
+%   - CR from a low or a high pool; the pool probability follows each pool's
+%     success rate averaged over the generations
+%   - Out-of-box genes re-sampled uniformly; greedy one-to-one selection
 %
 % Reference:
-% Ali Wagdy Mohamed, Ali Khater Mohamed,
-% Adaptive guided differential evolution algorithm with novel mutation for
-% numerical optimization,
-% International Journal of Machine Learning and Cybernetics 10(2) (2019) 253-277.
-% https://doi.org/10.1007/s13042-017-0711-7
+% Ugur Guvenc, Serhat Duman, Hamdi Tolga Kahraman, Sefa Aras, Mehmet Kati,
+% Fitness-Distance Balance based adaptive guided differential evolution
+% algorithm for security-constrained optimal power flow problem incorporating
+% renewable energy sources,
+% Applied Soft Computing 108 (2021) 107421.
+% https://doi.org/10.1016/j.asoc.2021.107421
+% Components:
+%   AGDE - Ali Wagdy Mohamed, Ali Khater Mohamed, Adaptive guided differential
+%     evolution algorithm with novel mutation for numerical optimization,
+%     International Journal of Machine Learning and Cybernetics 10(2) (2019)
+%     253-277, https://doi.org/10.1007/s13042-017-0711-7
+%   FDB - Hamdi Tolga Kahraman, Sefa Aras, Eyup Gedikli, Fitness-distance
+%     balance (FDB): A new selection method for meta-heuristic search
+%     algorithms, Knowledge-Based Systems 190 (2020) 105169,
+%     https://doi.org/10.1016/j.knosys.2019.105169
+% ----------------------------------------------------------------------- %
+% Implementation Note:
+% Ported from the authors' File Exchange package fdb_agde 1.0.1 (FX 90601),
+% FDB_AGDE_Case_2.m, as a one-line delta on this repository's agde.m. The package
+% numbers its cases differently from the paper: its Case_2 replaces x_pworst,
+% which is the paper's Case 3 (Table 3, Eq. 47), the variation the paper carries
+% forward ("the FDBAGDE (Case 3) will be used to optimize the SCOPF problem").
+% As in the package, the worst-5 draw is still made and discarded, the roulette
+% runs once per trial on the current population and may return the target, x_r
+% or x_pbest itself, with L1 distance and equal weights (the paper writes the
+% Euclidean distance, Eq. 43). Added: the roulette falls back to the last index
+% when rounding or a NaN score leaves the cumulative sum short of the draw.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
-function [best_fitness, best_solution, curve, population_history, fitness_history] = agde(problem)
+function [best_fitness, best_solution, curve, population_history, fitness_history] = fdb_agde(problem)
     
     % Extract problem parameters
     dim = problem.dimension;
@@ -107,6 +132,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             r1 = AA(randi(length(AA)));
             r2 = BB(randi(length(BB)));
             r3 = CC(randi(length(CC)));
+            % x_pworst by roulette FDB (paper Case 3); the worst-5 draw above only keeps the RNG stream
+            r2 = rouletteFitnessDistanceBalance(Pop, Fit);
             
             % Adaptive scaling factor
             F = 0.1 + 0.9 * rand;
@@ -194,3 +221,24 @@ function a = bound(a, ub, lb)
     end
 end
 
+% Roulette-wheel FDB selection: score = normalised fitness + normalised distance to the best
+function index = rouletteFitnessDistanceBalance(population, fitness)
+    fitness = fitness(:)';
+    populationSize = numel(fitness);
+    [~, bestIndex] = min(fitness);
+    best = population(bestIndex, :);
+    if (min(fitness) == max(fitness)) || (sum(fitness) >= Inf) || ~(sum(best) < Inf)
+        index = randi(populationSize);
+        return;
+    end
+    distances = sum(abs(best - population), 2)';
+    minFitness = min(fitness); maxMinFitness = max(fitness) - minFitness;
+    minDistance = min(distances); maxMinDistance = max(distances) - minDistance;
+    normFitness = 1 - ((fitness - minFitness) / maxMinFitness);
+    normDistances = (distances - minDistance) / maxMinDistance;
+    divDistances = normFitness + normDistances;
+    r = rand * sum(divDistances);
+    index = find(r <= cumsum(divDistances), 1, 'first');
+    % Rounding (or a NaN score) can leave the cumulative sum short of r
+    if isempty(index), index = populationSize; end
+end
