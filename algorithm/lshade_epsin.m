@@ -1,6 +1,6 @@
 % ----------------------------------------------------------------------- %
 % L-SHADE with Ensemble Sinusoidal Parameter Adaptation (L-SHADE-EpSin)
-% CEC 2016 competition -- 2nd place (Friedman ranking, CEC 2014 suite)
+% CEC 2016 competition -- 2nd by Friedman, 1st by total error (CEC 2014 suite)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 18 * D            % Initial population size

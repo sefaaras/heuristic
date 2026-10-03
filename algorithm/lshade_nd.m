@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % L-SHADE with Neurodynamic Differential Evolution (LSHADE-ND)
+% CEC 2015 learning-based track -- 3rd place, tied (organiser's draft ranking)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 18 * D -> 4       % Linear population size reduction

@@ -25,12 +25,11 @@
 %   - Out-of-box coordinates are resampled uniformly, not clamped
 %
 % Reference:
-% Sichen Tao, Ruihan Zhao, Kaiyu Wang, Shangce Gao,
-% An Efficient Reconstructed Differential Evolution Variant by Some of the
-% Current State-of-the-art Strategies for Solving Single Objective Bound
-% Constrained Problems,
-% arXiv preprint arXiv:2404.16280 (2024).
-% https://doi.org/10.48550/arXiv.2404.16280
+% Sichen Tao, Yifei Yang, Ruihan Zhao, Kaiyu Wang, Sicheng Liu, Shangce Gao,
+% RDEx-SOP: Exploitation-Biased Reconstructed Differential Evolution for
+% Fixed-Budget Bound-Constrained Single-Objective Optimization,
+% arXiv preprint arXiv:2603.27089 (2026).
+% https://doi.org/10.48550/arXiv.2603.27089
 % Components: L-SRTDE (Stanovov and Semenkin, CEC 2024) provides the frame;
 % the ordered-mutation hybrid and its adaptive share are RDEx's own.
 % ----------------------------------------------------------------------- %

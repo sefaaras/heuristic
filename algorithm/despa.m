@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Differential Evolution with Success-based Parameter Adaptation (DEsPA)
+% CEC 2015 learning-based track -- 2nd place (organiser's draft ranking)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NP = 4 -> 15*D -> 4         % Grows to the threshold, then shrinks linearly

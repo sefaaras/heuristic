@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % L-SHADE with Eigenvector Crossover and Successful-Parent Selection (SPS-L-SHADE-EIG)
+% CEC 2015 learning-based track -- 1st place (organiser's draft ranking)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   NP = 600 -> 4               % Linear reduction over the budget

@@ -1,6 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Multiple Local Search L-SHADE (MLS-LSHADE)
-% CEC 2021 bound-constrained track submission
+% CEC 2021 competition -- 4th provisional overall, 5th shifted
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size = 18*D -> 4        % Linear reduction over the budget

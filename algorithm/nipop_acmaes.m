@@ -1,26 +1,26 @@
 % ----------------------------------------------------------------------- %
-% NBIPOP Restart Active CMA-ES (NBIPOP-aCMA-ES)
-% CEC 2013 competition -- 1st by mean aggregated rank (2nd by Friedman test)
+% NIPOP Restart Active CMA-ES (NIPOP-aCMA-ES)
+% CEC 2013 competition -- 5th place (mean aggregated rank)
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
-%   lambda_def = 4 + floor(3*log(N)), sigma_def = 0.6*(ub - lb)
-%   large regime:  lambda = 2^i * lambda_def, sigma0 = 1.6^-i * sigma_def
-%   small regime:  lambda = lambda_def,       sigma0 = 0.01^U[0,1] * sigma_def
-%   budget ratio = 0.5 while the large regime holds the best result, else 2.0
-%   MaxIter = 100 + 50*(N+3)^2/sqrt(lambda), TolX = 1e-12*max(sigma_def), TolUpX = Inf
+%   lambda = 2^(k-1) * (4 + floor(3*log(N)))   % k-th run of a ten-run cycle
+%   sigma0 = 1.6^-(k-1) * 0.6*(ub - lb)        % Capped at (ub-lb)/2 after the first update
+%   x0     = U(lb, ub)                         % Fresh draw for every run
+%   cc = 4/(N+4), TolX = 1e-11 * 0.6*max(ub-lb), TolUpX = 1e3 * 0.6*max(ub-lb)
+%   MaxIter = 1e3*(N+5)^2/sqrt(lambda), TolHistFun = 1e-13
 %   neg.ccov = (1 - ccovmu) * 0.25 * mueff / ((N+2)^1.5 + 2*mueff)
 %
 % Algorithm Concept:
-%   - Two restart regimes share the budget: a small restart runs while the small
-%     regime has spent less than ratio times what the large one has
-%   - A large restart doubles the population AND shrinks its initial step size
-%     by 1.6 each time, instead of always starting from the default width
-%   - A small restart keeps the default population, randomises the step size,
-%     and is capped at half the large regime's spending in iterations
-%   - Every run ends by evaluating its final mean; after ten default/large runs
-%     the whole schedule starts over from the default population
+%   - IPOP restarts: whenever one of CMA-ES's own stopping criteria fires, the
+%     run restarts from a uniform point with the population doubled
+%   - New restart rule: each larger restart also starts from a step size 1.6
+%     times smaller, so the big populations search progressively more locally
+%   - Every run ends by evaluating its final mean; after ten runs the cycle
+%     starts over at the default population and step size
 %   - Active covariance update: the worst mu samples are subtracted, with the
 %     rate clipped when that would remove over a third of any direction's variance
+%   - Bounds: samples are projected into the box and an adaptive penalty on the
+%     projection distance enters selection only
 %
 % Reference:
 % Ilya Loshchilov,
@@ -29,21 +29,20 @@
 % https://doi.org/10.1109/CEC.2013.6557593
 % ----------------------------------------------------------------------- %
 % Implementation Note:
-% Ported from the author's NBIPOPaCMA.zip (CEC2013 archive): xacmes.m, Adapter.m
-% and its cmaes3.55 split (cmaes_iteration.m etc.), run with BIPOP = 1,
-% newRestartRules = 1, CMAactive = 1, surrogate off; nipop_acmaes shares the core.
-% Package quirks kept: runs 1-2 enter both regimes' results and run 1 is booked
-% twice to the small budget; TolHistFun's history is sized by the lambda that
-% cmaes_initializeRun computes before xacmes.m overrides it; the RNG draws follow
-% the package's order. Harness adaptations: the package evaluates CEC2013
-% unbounded and stops at an error of 1e-9; here Hansen's bound penalty keeps
-% points in the box and the whole budget is spent; NaN samples are not redrawn,
-% and a failed eig or an empty penalty history ends or patches the run, not errors.
+% The release is NBIPOPaCMA.zip (CEC2013 archive) run with settings.BIPOP = 0,
+% newRestartRules = 1, CMAactive = 1, withSurr = 0 (Preprocc.m's NIPOPaCMA).
+% The CMA-ES core is the package's cmaes3.55 split, shared with nbipop_cmaes;
+% BIPOP = 0 skips xacmes.m's option overrides, so cmaes3.55 defaults hold for
+% cc, ccov, TolX, TolUpX, TolHistFun and MaxIter, insigma being 0.6*(ub-lb).
+% Adapter.m calls xacmes afresh after its Restarts = 9, so the schedule restarts
+% every ten runs; the RNG draws follow the package's order. Harness adaptations:
+% the package evaluates CEC2013 unbounded and stops at an error of 1e-9; here
+% Hansen's bound penalty keeps points in the box and the whole budget is spent.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
 % ----------------------------------------------------------------------- %
-function [best_fitness, best_solution, curve, population_history, fitness_history] = nbipop_cmaes(problem)
+function [best_fitness, best_solution, curve, population_history, fitness_history] = nipop_acmaes(problem)
 
     N     = problem.dimension;
     lb    = problem.lb(:);
@@ -63,85 +62,28 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
     lambda_def = 4 + floor(3 * log(N));
     sigma_def  = 0.6 * (ub - lb);         % xacmes.m: sigma0 = 200*0.6 on [-100, 100]
 
-    % xacmes.m's option overrides for BIPOP = 1
-    opt.bipop      = true;
-    opt.tolx       = 1e-12 * max(sigma_def);
-    opt.tolupx     = inf;
-    opt.tolhistfun = 1e-12;
+    % cmaes3.55 defaults; xacmes.m overrides them only when BIPOP = 1
+    opt.bipop      = false;
+    opt.tolx       = 1e-11 * max(sigma_def);
+    opt.tolupx     = 1e3 * max(sigma_def);
+    opt.tolhistfun = 1e-13;
 
-    % Each pass is one xacmes.m call from Adapter.m, which starts it from scratch
+    % Each pass is one xacmes.m call from Adapter.m: ten IPOP runs (Restarts = 9)
     while FE < maxFE
         rand(20, 1);                      % xacmes.m calls cmaes_initialize twice, each drawing rand(10,1)
-
-        irun       = 0;
-        nrestarts  = 9;                   % opts.Restarts
-        n_small    = 1;                   % nrunswithsmallpopsize
-        irun_small = 1;
-        budget_small = [];
-        budget_large = [];
-        counteval  = 0;
-        counteval0 = 0;
-        ratio      = 1.0;                 % SmallPOPdivBigPOPbudget
-        res_large  = [];
-        res_small  = [];
-        bipop_criterion = false;
-
-        while (irun <= nrestarts || bipop_criterion) && FE < maxFE
+        irun = 0;
+        while irun <= 9 && FE < maxFE
             irun   = irun + 1;
-            lambda = floor(lambda_def * 2 ^ (irun - n_small));
-            % cmaes_initializeRun draws the start point before xacmes.m picks the regime
+            lambda = floor(lambda_def * 2 ^ (irun - 1));
             xstart = lb + rand(N, 1) .* (ub - lb);
-            opt.histLambda = floor(lambda_def * 2 ^ (irun - 1));
+            % New restart rule: each larger run also starts 1.6 times narrower
+            sigma0 = sigma_def * 1.6 ^ (-(irun - 1));
+            opt.histLambda = lambda;
+            opt.maxiter    = 1e3 * (N + 5) ^ 2 / sqrt(lambda);
 
-            if irun > 2 && sum(budget_small) < ratio * sum(budget_large)
-                % Small regime: default population, only the step size is randomised
-                nrestarts  = nrestarts + 1;
-                n_small    = n_small + 1;
-                irun_small = irun;
-                sigma0     = sigma_def * 0.01 ^ rand;
-                lambda     = lambda_def;
-                maxiter    = 0.5 * sum(budget_large) / lambda;
-                is_large   = false;
-            else
-                % Large regime: the new restart rule shrinks sigma0 by 1.6 per large run
-                sigma0   = sigma_def * 1.6 ^ (-(irun - n_small));
-                maxiter  = inf;
-                is_large = true;
-            end
-            opt.maxiter = min(100 + 50 * (N + 3) ^ 2 / sqrt(lambda), maxiter);
-
-            [FE, curve, population_history, fitness_history, history_index, bsf, bsfx, used, run_best] = ...
+            [FE, curve, population_history, fitness_history, history_index, bsf, bsfx] = ...
                 cmaesRun(problem, FE, maxFE, curve, population_history, fitness_history, ...
                          history_index, bsf, bsfx, xstart, sigma0, lambda, opt);
-            counteval = counteval + used;
-
-            % New restart rule: the regime holding the better result may spend more
-            if is_large || irun < 3
-                res_large(end + 1) = run_best; %#ok<AGROW>
-            end
-            if ~is_large || irun < 3
-                res_small(end + 1) = run_best; %#ok<AGROW>
-            end
-            if min(res_large) < min(res_small)
-                ratio = 0.5;
-            else
-                ratio = 2.0;
-            end
-
-            % xacmes.m's BIPOP budget book-keeping, run 1 counted twice as small
-            if irun == 1
-                budget_small = counteval;
-                budget_large = [];
-                counteval0   = 0;
-                irun_small   = 1;
-            end
-            if irun_small == irun
-                budget_small(end + 1) = counteval - counteval0; %#ok<AGROW>
-            elseif irun > 1
-                budget_large(end + 1) = counteval - counteval0; %#ok<AGROW>
-            end
-            counteval0 = counteval;
-            bipop_criterion = sum(budget_small) < ratio * sum(budget_large);
         end
     end
 

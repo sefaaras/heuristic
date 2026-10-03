@@ -1,5 +1,6 @@
 % ----------------------------------------------------------------------- %
 % Multiple Adaptation based Differential Evolution (MadDE)
+% CEC 2021 competition -- 2nd provisional overall and non-shifted, 6th shifted
 % ----------------------------------------------------------------------- %
 % Algorithm Parameters:
 %   pop_size    = min(2*D^2, 40*D)  % Initial population, capped above D = 20
