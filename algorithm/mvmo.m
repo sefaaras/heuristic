@@ -86,6 +86,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
     archive_x = zeros(n_to_save, n_var, n_par);
     archive_f = inf(n_to_save, n_par);
+    x_best = zeros(n_par, n_var);
+    all_visited = false;
 
     best_fitness = inf;
     best_solution = lb + scaling .* x_norm(1, :);
@@ -134,13 +136,20 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             % Archive of this particle, and the mapping shape it implies
             [archive_x, archive_f, no_in, no_inin, meann, variance, shape, x_norm_best] = ...
                 fill_archive(archive_x, archive_f, no_in, no_inin, meann, variance, shape, ...
-                             x_norm_best, x_norm, ipp, f_cur, n_to_save, n_var, l_vari);
+                             x_norm_best, x_norm, ipp, f_cur, n_to_save, l_vari);
 
             % Population = each evaluated particle's archive leader, the point its fitness belongs to
-            visited = no_in > 0;
-            [population_history, fitness_history, history_index] = record_history( ...
-                FE, lb + scaling .* x_norm_best(visited, :), archive_f(1, visited), ...
-                population_history, fitness_history, history_index, maxFE);
+            x_best(ipp, :) = lb + scaling .* x_norm_best(ipp, :);
+            if all_visited
+                [population_history, fitness_history, history_index] = record_history( ...
+                    FE, x_best, archive_f(1, :), population_history, fitness_history, history_index, maxFE);
+            else
+                visited = no_in > 0;
+                all_visited = all(visited);
+                [population_history, fitness_history, history_index] = record_history( ...
+                    FE, x_best(visited, :), archive_f(1, visited), ...
+                    population_history, fitness_history, history_index, maxFE);
+            end
 
             meann_app(ipp, :) = meann(ipp, :);
 
@@ -253,7 +262,7 @@ end
 % The archive holds this particle's n_to_save best, sorted, and their statistics
 function [archive_x, archive_f, no_in, no_inin, meann, variance, shape, x_norm_best] = ...
         fill_archive(archive_x, archive_f, no_in, no_inin, meann, variance, shape, ...
-                     x_norm_best, x_norm, ipp, f_cur, n_to_save, n_var, l_vari)
+                     x_norm_best, x_norm, ipp, f_cur, n_to_save, l_vari)
     no_in(ipp) = no_in(ipp) + 1;
     changed = false;
     i_position = 0;
@@ -283,11 +292,7 @@ function [archive_x, archive_f, no_in, no_inin, meann, variance, shape, x_norm_b
         archive_f(i_position, ipp) = f_cur;
 
         if no_inin(ipp) >= l_vari
-            for ivar = 1:n_var
-                [m, v] = mv_noneq(archive_x(1:nn, ivar, ipp));
-                meann(ipp, ivar) = m;
-                variance(ipp, ivar) = v;
-            end
+            [meann(ipp, :), variance(ipp, :)] = mv_noneq(archive_x(1:nn, :, ipp));
             nz = variance(ipp, :) > 1.1e-100;
             shape(ipp, nz) = -log(variance(ipp, nz));
         end
@@ -295,22 +300,16 @@ function [archive_x, archive_f, no_in, no_inin, meann, variance, shape, x_norm_b
     x_norm_best(ipp, :) = archive_x(1, :, ipp);
 end
 
-% Mean and variance over the DISTINCT archive values, so repeats do not sharpen the shape
-function [vmean, vvar] = mv_noneq(values)
-    vals = values(:);
-    keep = true(numel(vals), 1);
-    for i = 2:numel(vals)
-        if any(abs(vals(1:i-1) - vals(i)) < 1e-70)
-            keep(i) = false;
-        end
+% Mean and variance per coordinate over its DISTINCT archive values, so repeats do not sharpen the shape
+function [vmean, vvar] = mv_noneq(A)
+    keep = true(size(A));
+    for i = 2:size(A, 1)
+        keep(i, :) = ~any(abs(A(1:i-1, :) - A(i, :)) < 1e-70, 1);
     end
-    vals = vals(keep);
-    vmean = mean(vals);
-    if numel(vals) > 1
-        vvar = sum((vals - vmean) .^ 2) / numel(vals);
-    else
-        vvar = 1e-100;
-    end
+    cnt = sum(keep, 1);
+    vmean = sum(A .* keep, 1) ./ cnt;
+    vvar = sum((A - vmean) .^ 2 .* keep, 1) ./ cnt;
+    vvar(cnt == 1) = 1e-100;
 end
 
 % The mapping: a uniform draw is bent towards the archive mean, Eq. (2) of the paper
