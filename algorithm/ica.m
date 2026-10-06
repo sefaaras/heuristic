@@ -34,7 +34,9 @@
 % asymmetry is kept: a revolting imperialist keeps its trial only when better,
 % while a revolting colony takes it unconditionally. When empires have merged
 % into one, inter-empire competition returns untouched, as it does there, and
-% the run continues as a single empire.
+% the run continues as a single empire. When mixed-sign costs overflow the
+% empire weights to NaN, the reference's uniform fallback can draw the weakest
+% empire itself; an imperialist absorbed that way is dropped, as it is there.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -185,9 +187,11 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             else
                 % The weakest empire has no colony left, so it becomes one itself
                 winner = roulette(P);
-                col_pos(end+1, :) = imp_pos(weakest, :); %#ok<AGROW>
-                col_cost(end+1, 1) = imp_cost(weakest);  %#ok<AGROW>
-                col_emp(end+1, 1) = winner;              %#ok<AGROW>
+                if winner ~= weakest
+                    col_pos(end+1, :) = imp_pos(weakest, :); %#ok<AGROW>
+                    col_cost(end+1, 1) = imp_cost(weakest);  %#ok<AGROW>
+                    col_emp(end+1, 1) = winner;              %#ok<AGROW>
+                end
                 imp_pos(weakest, :) = [];
                 imp_cost(weakest) = [];
                 col_emp(col_emp > weakest) = col_emp(col_emp > weakest) - 1;
