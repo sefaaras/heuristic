@@ -33,13 +33,13 @@
 % Ported from the authors' released MATLAB (UMOEAsII.rar in Suganthan's CEC2016
 % archive). Its CMA-ES phase shares its lineage with this repository's ebocmar,
 % so the common parts follow that file, including the eigen guards ebocmar needed
-% and its unscaled sigma = 0.3. Two things from the release are kept as written:
-% CMA-ES samples are left unrepaired until half the budget is spent, and the
-% feasibility test on a new best compares against a hard -100/100 rather than the
-% problem's own box, which on a suite with another box simply never fires.
-% That test is coordinate-wise, so a NaN fails it: the release's min/max skip NaN,
-% and on CEC2020RW F12 the clamped flat plateau inflates sigma to Inf, whose NaN
-% samples reached best_solution in 4 campaign runs.
+% and its unscaled sigma = 0.3. As released, CMA-ES samples stay unrepaired until
+% half the budget is spent and only an in-box sample may become the best; that box
+% was a hard -100/100 and is the problem's own here (identical on the CEC suites),
+% since on CEC2020RW's narrower boxes the hard one let 138 campaign runs return a
+% solution outside the box. The test is coordinate-wise, so a NaN fails it: the
+% release's min/max skip NaN, and on CEC2020RW F12 a clamped flat plateau inflates
+% sigma to Inf, whose NaN samples reached best_solution in 4 campaign runs.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -124,7 +124,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 EA_obj2(1:numel(list_ind)) = EA_obj1(list_ind);
                 setting = init_cma_par(setting, EA_2, n, PS2);
                 setting.sigma = setting.sigma * (1 - FE / maxFE);
-            elseif all(EA_2(1, :) > -100 & EA_2(1, :) < 100)
+            elseif all(EA_2(1, :) > xmin & EA_2(1, :) < xmax)
                 EA_1(PS1, :) = EA_2(1, :);
                 EA_obj1(PS1) = EA_obj2(1);
                 [EA_obj1, ord] = sort(EA_obj1);
@@ -317,8 +317,8 @@ function [x, fitx, setting, bestold, bestx, fitness, FE, curve, ph, fh, hi] = ..
     [raw, FE] = calculate_fitness(arxvalid, problem, FE);
     raw = raw(:)';
 
-    % Only the batch best can replace bestold, and only inside the hard-coded box
-    inbox = all(arxvalid >= -100 & arxvalid <= 100, 1);
+    % Only the batch best can replace bestold, and only inside the box
+    inbox = all(arxvalid >= xmin(:) & arxvalid <= xmax(:), 1);
     [~, ib] = min(raw);
     accept = raw(ib) < bestold && inbox(ib);
     run_best = bestold;

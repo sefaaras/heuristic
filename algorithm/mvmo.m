@@ -113,7 +113,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
             FE_prev = FE;
             if rand < local_search_prob && FE < make_sense && FE > 1
-                [f_cur, x_norm(ipp, :), FE, singular] = local_search(x_norm(ipp, :), lb, ub, scaling, problem, FE, maxFE);
+                [f_cur, x_norm(ipp, :), FE, singular, x_cur] = local_search(x_norm(ipp, :), lb, ub, scaling, problem, FE, maxFE);
                 % The release gives up local search once a second search runs into a nearly singular system
                 n_singular_ls = n_singular_ls + singular;
                 if n_singular_ls >= 2
@@ -121,13 +121,15 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 end
             else
                 [f_cur, FE] = evaluate_norm(x_norm(ipp, :), lb, scaling, problem, FE);
+                x_cur = lb + scaling .* x_norm(ipp, :);
             end
 
             % A local search is charged as one block, over which the best so far holds
             curve(FE_prev + 1:min(FE, maxFE) - 1) = best_fitness;
             if f_cur < best_fitness
                 best_fitness = f_cur;
-                best_solution = lb + scaling .* x_norm(ipp, :);
+                % The point f_cur belongs to: a local-search result does not survive the round trip through x_norm
+                best_solution = x_cur;
             end
             if FE <= maxFE
                 curve(FE) = best_fitness;
@@ -227,8 +229,9 @@ function [f, FE] = evaluate_norm(x_norm, lb, scaling, problem, FE)
     f = fv(1);
 end
 
-function [f, x_norm, FE, singular] = local_search(x_norm, lb, ub, scaling, problem, FE, maxFE)
+function [f, x_norm, FE, singular, x] = local_search(x_norm, lb, ub, scaling, problem, FE, maxFE)
     x0 = lb + scaling .* x_norm;
+    x = x0;
     singular = false;
     f = evaluate_for_ls(x0(:), problem);
     FE = FE + 1;
@@ -250,7 +253,8 @@ function [f, x_norm, FE, singular] = local_search(x_norm, lb, ub, scaling, probl
     FE = FE + output.funcCount;
     if all(isfinite(xls))
         f = fls;
-        x_norm = ((xls(:)' - lb) ./ scaling);
+        x = xls(:)';
+        x_norm = ((x - lb) ./ scaling);
     end
 end
 

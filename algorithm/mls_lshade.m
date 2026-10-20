@@ -32,15 +32,14 @@
 % ----------------------------------------------------------------------- %
 % Implementation Note:
 % Ported from the released C++ (mls_lshade.cpp, search_algorithm.cpp). Three
-% defects in that release are reproduced deliberately, because they are what the
-% submitted algorithm does: the fourth interpolation point reads x(1) instead of
-% x(j), so it is built from one coordinate of the incumbent; the interpolation
-% divides the whole numerator, position included, by the curvature; and the local
-% search returns its LAST iterate rather than the best it saw, so it can hand
-% back a worse individual. Two guards are ours: the stall window is floored at
-% one generation, since 50*floor(D/10)^2 is zero below D = 10 and the C++ then
-% indexes before the start of its history, and the local search's working points
-% start initialised, which that indexing left to chance.
+% release defects are kept, being what was submitted: the fourth interpolation
+% point reads x(1) instead of x(j); the interpolation divides the whole numerator,
+% position included, by the curvature; and the local search returns its LAST
+% iterate, not the best it saw. Ours: the stall window is floored at one
+% generation (50*floor(D/10)^2 is zero below D = 10, where the C++ indexes before
+% its history), the local search's working points start initialised, and every
+% line-search probe is clamped to the box -- the halved doubling step was not, and
+% returned out-of-box solutions in 35 campaign runs.
 % ----------------------------------------------------------------------- %
 % Input:  problem struct (dimension, lb, ub, maxFe, fhd, number)
 % Output: [best_fitness, best_solution, curve, population_history, fitness_history]
@@ -363,7 +362,7 @@ function [result, result_fit, used, FE, curve, ph, fh, hi, bf, bx] = line_search
             used = used + 1;
             if x_fit > x0_fit
                 s = s / 2;
-                x = x0 + s * v;
+                x = min(max(x0 + s * v, lb), ub);
                 [x_fit, FE, curve, ph, fh, hi, bf, bx] = probe(x, problem, FE, maxFE, pop, popfit, curve, ph, fh, hi, bf, bx);
                 used = used + 1;
                 break;
