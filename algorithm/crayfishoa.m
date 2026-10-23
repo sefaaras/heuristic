@@ -97,7 +97,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         xfood  = xbest;
         ffood  = fbest;
         moved  = false;
-        out    = false;
         Xnew   = X;
         for i = 1:N
             if temp > 30
@@ -110,7 +109,6 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
             else
                 if moved
                     if FE >= maxFE
-                        out = true;
                         break;
                     end
                     % calculate_fitness clamps on the constrained suites, and 0 lies in every CEC box
@@ -138,7 +136,8 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 end
             end
         end
-        if out
+        % a food probe can take the last FE and leave no offspring to evaluate
+        if FE >= maxFE
             break;
         end
 
