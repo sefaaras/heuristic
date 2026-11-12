@@ -67,7 +67,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
         x = lb + w .* (0.1 + 0.8 * rand(1, D));
         [fx, FE] = calculate_fitness(x', problem, FE);
         fx = fx(1);
-        if isempty(bsfx) || fx < bsf
+        if isempty(bsfx) || fx < bsf || (isnan(bsf) && ~isnan(fx))
             bsf  = fx;
             bsfx = x;
         end
@@ -96,7 +96,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
                 sigma = sigma * dec;
             end
 
-            if fy < bsf
+            if fy < bsf || (isnan(bsf) && ~isnan(fy))
                 bsf  = fy;
                 bsfx = y;
             end

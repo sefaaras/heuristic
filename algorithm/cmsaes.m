@@ -96,7 +96,7 @@ function [best_fitness, best_solution, curve, population_history, fitness_histor
 
             popRows = X';
             for k = 1:n
-                if isempty(bsfx) || fit(k) < bsf
+                if isempty(bsfx) || fit(k) < bsf || (isnan(bsf) && ~isnan(fit(k)))
                     bsf  = fit(k);
                     bsfx = popRows(k, :);
                 end
