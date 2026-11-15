@@ -2,7 +2,7 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
 % The only evaluator. solutions is D x ps (one column per candidate).
 %
 %   fitness       value the SEARCH minimises; on a constrained suite
-%                 (CEC2020RW, CEDP) this folds in the constraints. Row for
+%                 (CEC2020RW, HOLD) this folds in the constraints. Row for
 %                 the numeric suites, column for those two -- each suite's own
 %                 convention is preserved
 %   FE            updated counter, returned UNCHANGED when count_this is false
@@ -15,8 +15,14 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
 % calculate_fitness('reset') drops the cached problem state and must run once per
 % run (main.m does it), or a parfor worker carries one job's state into the next.
 % calculate_fitness('stats') returns the counters accumulated since that reset.
+% calculate_fitness('trace_on') makes the counted evaluations of this run also
+% log every improvement of the best FEASIBLE objective, and
+% calculate_fitness('trace') returns that log as [FE, objective] rows. Off by
+% default and switched off again by 'reset'; hold_run uses it for the success
+% rates and FEs-to-target the HOLD literature reports.
 
     persistent lastFhd lastNum lastDim lastIsCon worstObjective nIneq nEq runStats
+    persistent traceOn traceBuf traceN
 
     if ischar(solutions) || isstring(solutions)
         switch lower(char(solutions))
@@ -24,8 +30,23 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
                 lastFhd = []; lastNum = []; lastDim = []; lastIsCon = [];
                 worstObjective = []; nIneq = []; nEq = [];
                 runStats = new_stats();
+                traceOn = false; traceN = 0;
                 clear('cec20rw_func');   % drop its persistent G/B/P/Q/initial_flags
                 fitness = []; FE = 0; is_feasible = []; violation = []; objective = [];
+                max_violation = [];
+                return;
+            case 'trace_on'
+                traceOn = true; traceN = 0;
+                fitness = []; FE = 0; is_feasible = []; violation = []; objective = [];
+                max_violation = [];
+                return;
+            case 'trace'
+                if isempty(traceN) || traceN == 0
+                    fitness = zeros(0, 2);
+                else
+                    fitness = traceBuf(1:traceN, :);
+                end
+                FE = 0; is_feasible = []; violation = []; objective = [];
                 max_violation = [];
                 return;
             case 'stats'
@@ -62,14 +83,15 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
         % for the first evaluation of this (function, dimension).
         fname = func2str(problem.fhd);
         isRW = contains(fname, 'cec20rw');
-        isCedp = contains(fname, 'cedp');
-        lastIsCon = isRW || isCedp;   % suites that return [f, g, h]
+        isHold = contains(fname, 'hold_func');
+        lastIsCon = isRW || isHold;   % suites that return [f, g, h]
 
         originalDir = pwd;
         restoreDir = onCleanup(@() cd(originalDir));  % restore cwd on return/error
 
-        % CEDP is absent here on purpose: it is pure MATLAB and reads no
-        % input_data, so it needs no cd -- unlike the MEX suites, which load
+        % HOLD is absent here on purpose: none of its evaluators reads from the
+        % current folder (its MEX files, gtopx and epanet, locate their data by
+        % full path), so it needs no cd -- unlike the CEC MEX suites, which load
         % their shift and rotation data from the current folder.
         if contains(fname, 'cec14')
             cd('problem/CEC2014');
@@ -91,8 +113,8 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
             par = Cal_par(problem.number);
             nIneq = par.g;
             nEq   = par.h;
-        elseif isCedp
-            par = cedp_par(problem.number);
+        elseif isHold
+            par = hold_par(problem.number);
             nIneq = par.g;
             nEq   = par.h;
         end
@@ -110,6 +132,10 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
     end
 
     if count_this
+        if ~isempty(traceOn) && traceOn
+            [traceBuf, traceN] = add_trace(traceBuf, traceN, runStats.n_eval, ...
+                runStats.best_feas_obj, is_feasible, objective);
+        end
         runStats = accumulate(runStats, is_feasible, violation, objective, num_evaluations);
         FE = FE + num_evaluations;
     else
@@ -118,6 +144,29 @@ function [fitness, FE, is_feasible, violation, objective, max_violation] = calcu
         % the search then sees for every infeasible point.
         worstObjective = refBefore;
     end
+end
+
+function [buf, n] = add_trace(buf, n, base, prev, is_feasible, objective)
+% Append one row [FE, objective] for every candidate of this batch that improves
+% the best feasible objective so far (prev, NaN before the first feasible point).
+% FE indices are 1-based over the run, as in accumulate. The buffer grows
+% geometrically, so a run with many improvements stays linear in cost.
+    o = double(objective(:));
+    o(~logical(is_feasible(:)) | isnan(o)) = Inf;
+    if isnan(prev)
+        prev = Inf;
+    end
+    m = cummin([prev; o]);
+    k = find(m(2:end) < m(1:end-1));
+    if isempty(k)
+        return;
+    end
+    need = n + numel(k);
+    if need > size(buf, 1)
+        buf(max(2 * size(buf, 1), max(need, 256)), 2) = 0;
+    end
+    buf(n+1:need, :) = [base + k, m(k + 1)];
+    n = need;
 end
 
 function s = new_stats()
@@ -259,7 +308,7 @@ function C = pick_constraints(c, n, ps)
 % Return the real constraints as nc x ps.
 %
 % Every suite here hands them over that way already -- cec20rw_func ends on
-% `g=g'; h=h';` and cedp_func does the same -- so the nc x ps reading is
+% `g=g'; h=h';` and hold_func does the same -- so the nc x ps reading is
 % tried first and the transpose is only a fallback for a block that does not
 % match it. The order matters exactly when a batch holds as many candidates as
 % the problem has constraints: both readings fit a square block, and reading it

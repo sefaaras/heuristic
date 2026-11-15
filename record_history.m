@@ -262,13 +262,14 @@ function S = pop_constraints(X, f, prob)
 % Off a constrained suite there is nothing to read -- f IS the objective,
 % everything is feasible and every violation is 0 -- and the call is skipped
 % entirely. is_rw below reads "this suite has constraints"; the name predates
-% CEDP and is kept so the stored metric columns keep their meaning.
+% the other constrained suites and is kept so the stored metric columns keep
+% their meaning.
     N = size(X, 1);
     S = struct('obj', double(f(:)), 'feas', ones(N, 1), 'viol', zeros(N, 1), ...
                'vmax', zeros(N, 1), 'is_rw', false);
     if isempty(prob) || ~isstruct(prob) || ~isfield(prob, 'fhd') ...
             || ~isfield(prob, 'dimension') || prob.dimension ~= size(X, 2) ...
-            || ~contains(func2str(prob.fhd), {'cec20rw', 'cedp'})
+            || ~contains(func2str(prob.fhd), {'cec20rw', 'hold_func'})
         return;
     end
     S.is_rw = true;

@@ -19,6 +19,7 @@ addpath('problem/CEC2020');
 addpath('problem/CEC2020RW');
 addpath('problem/CEC2021');
 addpath('problem/CEC2022');
+addpath('problem/HOLD');
 
 algorithms = {''};
 
@@ -63,14 +64,17 @@ all_experiments = {
     'cec2021_10', 'cec2021_20', ...
     'cec2022_10', 'cec2022_20'
 };
+% HOLD (problem/HOLD) is not part of the routine grid: to run it, set
+% all_experiments = {'hold'}; its cases carry their own budget and run count.
 
 total_jobs = 0;
 for exp_idx = 1:length(all_experiments)
     experiment_name = all_experiments{exp_idx};
     config = experiment_factory(experiment_name);
-    jobs_for_this_exp = length(algorithms) * length(config.function_numbers) * config.runs_per_experiment;
+    runs_per_func = runs_of(config);
+    jobs_for_this_exp = length(algorithms) * sum(runs_per_func);
     fprintf('  %s: %d algorithms x %d functions x %d runs = %d jobs\n', ...
-            experiment_name, length(algorithms), length(config.function_numbers), config.runs_per_experiment, jobs_for_this_exp);
+            experiment_name, length(algorithms), length(config.function_numbers), max(runs_per_func), jobs_for_this_exp);
     total_jobs = total_jobs + jobs_for_this_exp;
 end
 fprintf('Preallocating for %d total jobs...\n', total_jobs);
@@ -83,6 +87,7 @@ job_id = 0;
 for exp_idx = 1:length(all_experiments)
     experiment_name = all_experiments{exp_idx};
     config = experiment_factory(experiment_name);
+    runs_per_func = runs_of(config);
 
     for alg_idx = 1:length(algorithms)
         alg_name = algorithms{alg_idx};
@@ -90,7 +95,7 @@ for exp_idx = 1:length(all_experiments)
         for func_idx = 1:length(config.function_numbers)
             func_num = config.function_numbers(func_idx);
 
-            for run_idx = 1:config.runs_per_experiment
+            for run_idx = 1:runs_per_func(func_idx)
                 job_id = job_id + 1;
 
                 all_jobs(job_id).id = job_id;
@@ -216,7 +221,7 @@ parfor job_idx = 1:remaining_jobs
         fprintf('Job %d (Exp:%s, Alg:%s, F%d, Run%d) completed in %.2f sec (fitness: %.6e)\n', ...
                 job.id, job.experiment_name, job.alg_name, job.func_num, job.run, exec_time, best_fitness);
 
-        if ~(contains(job.experiment_name, 'cec2020rw') || strcmpi(job.experiment_name, 'cedp'))
+        if ~(contains(job.experiment_name, 'cec2020rw') || strcmpi(job.experiment_name, 'hold'))
             global_min = get_global_minimum(job.experiment_name, job.func_num);
             best_error = best_fitness - global_min;
         else
@@ -225,7 +230,7 @@ parfor job_idx = 1:remaining_jobs
 
         % Recover the raw f(x) and the mean violation v(x) of the reported solution.
         % Constrained suites only: elsewhere f IS the objective and nothing is violated.
-        if contains(job.experiment_name, 'cec2020rw') || strcmpi(job.experiment_name, 'cedp')
+        if contains(job.experiment_name, 'cec2020rw') || strcmpi(job.experiment_name, 'hold')
             % count_this = false: an audit call must not enter the FE counters
             [~, ~, is_feasible, violation, objective, max_violation] = ...
                 calculate_fitness(best_solution(:), problem, 0, false);
@@ -240,7 +245,7 @@ parfor job_idx = 1:remaining_jobs
             max_violation = 0;
         end
 
-        if contains(job.experiment_name, 'cec2020rw') || strcmpi(job.experiment_name, 'cedp')
+        if contains(job.experiment_name, 'cec2020rw') || strcmpi(job.experiment_name, 'hold')
             save_run(job.alg_name, job.func_num, job.run, ...
                      best_fitness, best_solution, curve, ...
                      exec_time, problem, job.experiment_name, ...
@@ -269,3 +274,14 @@ end
 fprintf('\n=== Execution Complete ===\n');
 fprintf('Completed %d new jobs\n', remaining_jobs);
 fprintf('Total completed jobs: %d / %d\n', completed_count + remaining_jobs, total_jobs);
+
+function r = runs_of(config)
+% Runs per function: the suite's single count, or one count per function where
+% the suite sets them (HOLD, whose cases follow the protocol of the published
+% results they are compared with).
+    if isfield(config, 'runs_per_function')
+        r = config.runs_per_function;
+    else
+        r = repmat(config.runs_per_experiment, 1, numel(config.function_numbers));
+    end
+end

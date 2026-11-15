@@ -151,27 +151,24 @@ function experiment_config = experiment_factory(experiment_name)
             experiment_config.use_cal_par = true;
             experiment_config.par_func = 'Cal_par';
 
-        case 'cedp'
-            % The ten constrained engineering design problems the metaheuristic
-            % literature reports most often, in the formulations their published
-            % optima belong to (problem/CEDP/cedp_par.m lists both).
-            %
-            % Dimension and box are per problem, the budget is NOT: at D = 2..11
-            % the dimension ladder would hand a 2-variable truss the same 1e5 FEs
-            % as an 11-variable one, and every algorithm would sit on the optimum
-            % for most of the run. 15 000 FEs is the budget the sources these
-            % problems come from use, and it is what keeps the comparison
-            % discriminating.
-            experiment_config.description = 'Constrained engineering design problems';
+        case 'hold'
+            % HOLD, the held-out literature-referenced problems (problem/HOLD).
+            % A function number is a CASE: one problem instance under one
+            % published protocol, so the budget AND the run count come from
+            % hold_par per case -- a published number is only comparable with
+            % a run made under its own protocol. Not part of the routine grid.
+            experiment_config.description = 'HOLD held-out literature-referenced problems';
             experiment_config.dimensions = 0;
-            experiment_config.function_numbers = 1:10;
-            experiment_config.maxFE = 15000;
+            experiment_config.function_numbers = 1:hold_par();
+            experiment_config.maxFE = 0;
             experiment_config.bounds = [0, 0];
             experiment_config.use_cal_par = true;
-            experiment_config.par_func = 'cedp_par';
+            experiment_config.par_func = 'hold_par';
+            experiment_config.runs_per_function = arrayfun(@(k) hold_par(k).runs, ...
+                                                           experiment_config.function_numbers);
 
         otherwise
-            error('Unknown experiment name: %s\nAvailable experiments:\n  CEC2014: cec2014_10, cec2014_30, cec2014_50, cec2014_100\n  CEC2017: cec2017_10, cec2017_30, cec2017_50, cec2017_100\n  CEC2020: cec2020_5, cec2020_10, cec2020_15, cec2020_20\n  CEC2020RW: cec2020rw\n  CEDP: cedp\n  CEC2021: cec2021_10, cec2021_20\n  CEC2022: cec2022_10, cec2022_20', experiment_name);
+            error('Unknown experiment name: %s\nAvailable experiments:\n  CEC2014: cec2014_10, cec2014_30, cec2014_50, cec2014_100\n  CEC2017: cec2017_10, cec2017_30, cec2017_50, cec2017_100\n  CEC2020: cec2020_5, cec2020_10, cec2020_15, cec2020_20\n  CEC2020RW: cec2020rw\n  HOLD: hold\n  CEC2021: cec2021_10, cec2021_20\n  CEC2022: cec2022_10, cec2022_20', experiment_name);
     end
 
 end

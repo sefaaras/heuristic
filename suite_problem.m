@@ -21,9 +21,11 @@ function problem = suite_problem(experiment_name, func_num)
 %   cfg.par_func empty   fixed dimension and a symmetric box (the numeric CEC
 %                        suites); budget is cfg.maxFE
 %   cfg.par_func set     dimension and box are per problem, read from that
-%                        function (Cal_par for CEC2020RW, cedp_par for
-%                        CEDP); budget is cfg.maxFE when the suite fixes one,
-%                        otherwise the CEC2020RW dimension ladder
+%                        function (Cal_par for CEC2020RW, hold_par for
+%                        HOLD); budget is cfg.maxFE when
+%                        the suite fixes one, else par.maxFE when the problem
+%                        carries its own (HOLD), otherwise the CEC2020RW
+%                        dimension ladder
 
     cfg = experiment_factory(experiment_name);
 
@@ -38,6 +40,8 @@ function problem = suite_problem(experiment_name, func_num)
         problem.ub = par.xmax;
         if cfg.maxFE > 0
             problem.maxFe = cfg.maxFE;
+        elseif isfield(par, 'maxFE') && par.maxFE > 0
+            problem.maxFe = par.maxFE;      % HOLD: the case carries its protocol
         else
             problem.maxFe = rw_budget(par.n);
         end
@@ -63,8 +67,8 @@ function name = suite_fhd_name(experiment_name)
         name = 'cec21_bias_shift_rot_func';
     elseif contains(experiment_name, 'cec2022')
         name = 'cec22_func';
-    elseif strcmpi(experiment_name, 'cedp')
-        name = 'cedp_func';
+    elseif strcmpi(experiment_name, 'hold')
+        name = 'hold_func';
     else
         error('suite_problem:unknownExperiment', ...
               'No evaluator is mapped for experiment "%s".', experiment_name);

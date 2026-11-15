@@ -1,7 +1,7 @@
 function save_run(algorithm_name, func_num, run_num, best_fitness, best_solution, curve, exec_time, problem, experiment_name, population_history, fitness_history, varargin)
 % Writes one finished run to results/<alg>/<experiment>/F<n>/run<k>/.
 % varargin is {job_id, is_feasible, violation, objective, max_violation} on a
-% constrained suite (CEC2020RW, CEDP) and {best_error, job_id, is_feasible}
+% constrained suite (CEC2020RW, HOLD) and {best_error, job_id, is_feasible}
 % elsewhere. Those two suites are the ones whose problems carry constraints,
 % so they are the ones that persist is_feasible / objective /
 % constraint_violation and store best_error as NaN.
@@ -58,7 +58,7 @@ function save_run(algorithm_name, func_num, run_num, best_fitness, best_solution
         run_info.bsf_at_maxfe = NaN;
     end
 
-    if contains(experiment_name, 'cec2020rw') || strcmpi(experiment_name, 'cedp')
+    if contains(experiment_name, 'cec2020rw') || strcmpi(experiment_name, 'hold')
         run_info.targets       = [];
         run_info.fe_to_target  = [];
         run_info.err_at_target = [];
@@ -75,7 +75,7 @@ function save_run(algorithm_name, func_num, run_num, best_fitness, best_solution
         run_info.success       = ~isnan(fe_to_target(end));
     end
 
-    if contains(experiment_name, 'cec2020rw') || strcmpi(experiment_name, 'cedp')
+    if contains(experiment_name, 'cec2020rw') || strcmpi(experiment_name, 'hold')
         if length(varargin) >= 2
             run_info.is_feasible = varargin{2};
         else
@@ -119,7 +119,7 @@ function save_run(algorithm_name, func_num, run_num, best_fitness, best_solution
         end
     end
 
-    if contains(experiment_name, 'cec2020rw') || strcmpi(experiment_name, 'cedp')
+    if contains(experiment_name, 'cec2020rw') || strcmpi(experiment_name, 'hold')
         run_info.n_ineq = stats.n_ineq;
         run_info.n_eq   = stats.n_eq;
         run_info.first_fe_feasible = stats.first_fe_feasible;
