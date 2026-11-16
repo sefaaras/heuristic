@@ -19,9 +19,24 @@ addpath('problem/CEC2020');
 addpath('problem/CEC2020RW');
 addpath('problem/CEC2021');
 addpath('problem/CEC2022');
-addpath('problem/HOLD');
 
 algorithms = {''};
+
+all_experiments = {
+    'cec2014_10', 'cec2014_30', 'cec2014_50', 'cec2014_100', ...
+    'cec2017_10', 'cec2017_30', 'cec2017_50', 'cec2017_100', ...
+    'cec2020_5', 'cec2020_10', 'cec2020_15', 'cec2020_20', ...
+    'cec2020rw', ...
+    'cec2021_10', 'cec2021_20', ...
+    'cec2022_10', 'cec2022_20'
+};
+% HOLD (problem/HOLD) is not part of the routine grid: to run it, set
+% all_experiments = {'hold'}; its cases carry their own budget and run count.
+% Its folder joins the path only then, before the pool starts, so a routine
+% run never sees it.
+if any(strcmpi(all_experiments, 'hold'))
+    addpath('problem/HOLD');
+end
 
 HISTORY_SAMPLES = 1000;
 
@@ -55,17 +70,6 @@ else
         fprintf('Parallel pool already running with %d workers (optimal)\n', poolobj.NumWorkers);
     end
 end
-
-all_experiments = {
-    'cec2014_10', 'cec2014_30', 'cec2014_50', 'cec2014_100', ...
-    'cec2017_10', 'cec2017_30', 'cec2017_50', 'cec2017_100', ...
-    'cec2020_5', 'cec2020_10', 'cec2020_15', 'cec2020_20', ...
-    'cec2020rw', ...
-    'cec2021_10', 'cec2021_20', ...
-    'cec2022_10', 'cec2022_20'
-};
-% HOLD (problem/HOLD) is not part of the routine grid: to run it, set
-% all_experiments = {'hold'}; its cases carry their own budget and run count.
 
 total_jobs = 0;
 for exp_idx = 1:length(all_experiments)
