@@ -13,7 +13,9 @@ function par = hold_par(k)
 %                   reference only -- nothing in the pipeline scores against it
 %   par.maxFE       FE budget of this case
 %   par.runs        independent runs of this case
-%   par.matches     the studies whose protocol this case reproduces
+%   par.matches     the studies whose protocol this case reproduces: each has a
+%                   result at exactly this instance, budget and run count in
+%                   literature/results.csv (documentation only; '' = none)
 %
 % Same shape and field names as Cal_par, so the harness reads both through one
 % code path, plus the budget and the run count: HOLD compares
@@ -29,33 +31,37 @@ function par = hold_par(k)
         % problem       instance  maxFE   runs  matches
         'pv_ddm_rtc',   '',       50000,  30,   'liang2020_sede; yu2019_pgjaya; chen2025_decm; yu2017_ijaya'
         'pv_ddm_rtc',   '',       30000,  30,   'hu2021_rlde'
-        'protein_ab3d', '2KGU',   200000, 30,   'boskovic2020_de2p; boskovic2018_delscr; rakhshani2019_sgde; boskovic2016_depfo; boiani2020_cuhjde3d'
-        'protein_ab3d', '1AGT',   200000, 30,   'boskovic2020_de2p; boskovic2018_delscr; rakhshani2019_sgde; boskovic2016_depfo; boiani2020_cuhjde3d'
-        'protein_ab3d', '1CRN',   200000, 30,   'boskovic2020_de2p; boskovic2018_delscr; rakhshani2019_sgde; boskovic2016_depfo; boiani2020_cuhjde3d'
-        'protein_ab3d', '1GK4',   200000, 30,   'boskovic2020_de2p; boskovic2018_delscr; rakhshani2019_sgde; boskovic2016_depfo; boiani2020_cuhjde3d'
-        'protein_ab3d', '2EWH',   800000, 30,   'boskovic2020_de2p; boskovic2018_delscr; boskovic2016_depfo; boiani2020_cuhjde3d'
-        'chped48',      '',       300000, 50,   'huang2019_hecs; hakmi2024_iaqt; hakmi2023_koa'
-        'chped48',      '',      1600000, 50,   'zou2019_igancm; li2024_mga'
-        'chped96',      '',       300000, 50,   'liu2022_ndide; huang2019_hecs; shaheen2022_iht; hakmi2024_iaqt; hakmi2023_koa'
+        'protein_ab3d', '2KGU',   200000, 30,   'boskovic2020_de2p; rakhshani2019_sgde; boskovic2016_depfo; boiani2020_cuhjde3d; li2015_iabc'
+        'protein_ab3d', '1AGT',   200000, 30,   'boskovic2020_de2p; rakhshani2019_sgde; boskovic2016_depfo; boiani2020_cuhjde3d; li2015_iabc'
+        'protein_ab3d', '1CRN',   200000, 30,   'boskovic2020_de2p; rakhshani2019_sgde; boskovic2016_depfo; boiani2020_cuhjde3d; li2015_iabc'
+        'protein_ab3d', '1GK4',   200000, 30,   'boskovic2020_de2p; rakhshani2019_sgde; boskovic2016_depfo; boiani2020_cuhjde3d; li2015_iabc'
+        'protein_ab3d', '2EWH',   800000, 30,   'boskovic2020_de2p; boskovic2016_depfo; boiani2020_cuhjde3d; li2015_iabc'
+        % cases 8-9: no study prints this exact protocol. 8 = the 100 x 3000 of
+        % hakmi2024_iaqt / hakmi2023_koa (runs not stated) with the 50 runs of
+        % huang2019_hecs; 9 = the 1.6M FEs of zou2019_igancm (30 runs) with the 50
+        % runs of li2024_mga (FEs not stated). Compared with the nearest protocols.
+        'chped48',      '',       300000, 50,   ''
+        'chped48',      '',      1600000, 50,   ''
+        'chped96',      '',       300000, 50,   'liu2022_ndide'
         'chped96',      '',      2000000, 50,   'liu2021_nde'
         'truss200_freq', 'fx180060', 290000, 21, 'ozturk2025_nsm'
-        'truss200_freq', 'fx180060', 580000, 30, 'ghiaskar2026_pfa'
-        'dome1180_freq', '',       20000,  20,   'kaveh2023_shade; kaveh2022_isma; truong2023_fafbi; kaveh2016_ecbocascade'
-        'dome1180_freq', '',       30000,  20,   'kaveh2026_ide; kaveh2018_mdvcuvps; kaveh2021_chaoticwsa'
-        'dome1410_freq', '',       20000,  20,   'kaveh2023_shade; kaveh2022_isma; truong2023_fafbi; kaveh2021_stja; carvalho2018_crpso; kaveh2016_ecbocascade'
-        'dome1410_freq', '',       30000,  20,   'kaveh2026_ide; kaveh2025_ihgo; kaveh2018_mdvcuvps; kaveh2021_chaoticwsa'
+        'truss200_freq', 'fx180060', 580000, 20, 'ghiaskar2026_pfa'
+        'dome1180_freq', '',       20000,  20,   'kaveh2023_shade'
+        'dome1180_freq', '',       30000,  20,   'kaveh2026_ide; kaveh2021_chaoticwsa'
+        'dome1410_freq', '',       20000,  20,   'kaveh2023_shade'
+        'dome1410_freq', '',       30000,  20,   'kaveh2026_ide; kaveh2025_ihgo; kaveh2021_chaoticwsa'
         'gtop_cassini1', '',      150000, 25,   'tang2022_hlshade'
         'gtop_cassini1', '',       50000, 30,   'turkoglu2025_caaa'
-        'wdn_balerma',  '',      2500000, 10,   'du2023_aepdrsde; du2022_sassde'
-        'wdn_balerma',  '',      2000000, 10,   'neshat2019_cmags; zheng2011_nlpde; bi2015_phsm'
+        'wdn_balerma',  '',      2500000, 10,   'du2023_aepdrsde'
+        'wdn_balerma',  '',      2000000, 10,   'neshat2019_cmags; zheng2011_nlpde'
         'wdn_balerma',  '',       500000, 10,   'moosavian2019_fde'
-        'wdn_balerma',  '',        45400, 10,   'moosavian2019_fde; bolognesi2010_ghest; reca2008_metaheuristics'
-        'wdn_hanoi',    'w10.667', 200000, 100, 'du2023_aepdrsde; zheng2011_nlpde; neshat2019_cmags; zheng2013_sade'
-        'wdn_hanoi',    'w10.667', 100000, 100, 'moosavian2019_fde; neshat2019_cmags; tolson2009_hddds; zheng2013_sade; moosavian2014_slc'
-        'wdn_hanoi',    'w10.667', 40000,  100, 'zheng2014_blpde; moosavian2019_eatest'
-        'wdn_hanoi',    'w10.667', 10000,  100, 'moosavian2019_fde; moosavian2019_eatest; suribabu2010_de'
+        'wdn_balerma',  '',        45400, 10,   'moosavian2019_fde'
+        'wdn_hanoi',    'w10.667', 200000, 100, 'du2023_aepdrsde'
+        'wdn_hanoi',    'w10.667', 100000, 100, 'moosavian2019_fde'
+        'wdn_hanoi',    'w10.667', 40000,  100, 'zheng2014_blpde'
+        'wdn_hanoi',    'w10.667', 10000,  100, 'moosavian2019_fde'
         'wdn_hanoi',    'w10.667', 5000,   100, 'moosavian2019_fde'
-        'wdn_hanoi',    'w10.667', 1000,   100, 'moosavian2019_fde; moosavian2019_eatest'
+        'wdn_hanoi',    'w10.667', 1000,   100, 'moosavian2019_fde'
         };
 
     if nargin == 0

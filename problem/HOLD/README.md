@@ -87,15 +87,15 @@ stored under it stay meaningful when the pool grows.
 | Case | Problem | Budget x runs | Protocol of |
 |---|---|---|---|
 | 1-2 | PV double-diode model, R.T.C. France | 50k / 30k x 30 | SEDE, PGJAYA, DECM, IJAYA / RLDE |
-| 3-7 | Protein 3D AB: 2KGU, 1AGT, 1CRN, 1GK4 (200k), 2EWH (800k) | x 30 | DE2P, DElscr, SGDE, DEpfo, cuHjDE-3D |
-| 8-9 | CHPED, 48 units | 300k / 1.6M x 50 | HECS, IAQT, KOA / IGA-NCM, MGA |
-| 10-11 | CHPED, 96 units | 300k / 2M x 50 | NDIDE, HECS, IHT, IAQT, KOA / NDE |
-| 12-13 | 200-bar truss, frequency constraints | 290k x 21 / 580k x 30 | Ozturk & Kahraman 2025 / Ghiaskar & Taheri 2026 |
-| 14-15 | 1180-bar dome | 20k / 30k x 20 | SHADE, ISMA / IDE, MDVC-UVPS |
-| 16-17 | 1410-bar dome | 20k / 30k x 20 | SHADE, ISMA / IDE, IHGO, MDVC-UVPS |
+| 3-7 | Protein 3D AB: 2KGU, 1AGT, 1CRN, 1GK4 (200k), 2EWH (800k) | x 30 | DE2P, SGDE, DEpfo, cuHjDE-3D, I-ABC |
+| 8-9 | CHPED, 48 units | 300k / 1.6M x 50 | none exactly: the budget of IAQT, KOA / IGA-NCM with the runs of HECS / MGA |
+| 10-11 | CHPED, 96 units | 300k / 2M x 50 | NDIDE / NDE |
+| 12-13 | 200-bar truss, frequency constraints | 290k x 21 / 580k x 20 | Ozturk & Kahraman 2025 / Ghiaskar & Taheri 2026 |
+| 14-15 | 1180-bar dome | 20k / 30k x 20 | SHADE / IDE, Chaotic WSA |
+| 16-17 | 1410-bar dome | 20k / 30k x 20 | SHADE / IDE, IHGO, Chaotic WSA |
 | 18-19 | Cassini1 (ESA GTOP) | 150k x 25 / 50k x 30 | Tang et al. 2022 / Turkoglu et al. 2025 |
-| 20-23 | Balerma irrigation network | 2.5M / 2M / 500k / 45.4k x 10 | AEPD-RSDE, SA-SSDE / CMA-ES-GS, NLP-DE / FDE / FDE, GHEST |
-| 24-29 | Hanoi network | 200k / 100k / 40k / 10k / 5k / 1k x 100 | AEPD-RSDE, NLP-DE / FDE, SADE / BLP-DE / FDE / FDE / FDE |
+| 20-23 | Balerma irrigation network | 2.5M / 2M / 500k / 45.4k x 10 | AEPD-RSDE / CMA-ES-GS, NLP-DE / FDE / FDE |
+| 24-29 | Hanoi network | 200k / 100k / 40k / 10k / 5k / 1k x 100 | AEPD-RSDE / FDE / BLP-DE / FDE / FDE / FDE |
 
 ## Schema
 
